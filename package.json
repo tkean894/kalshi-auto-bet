@@ -6,7 +6,9 @@
     "dev": "next dev --hostname 127.0.0.1 --port 43127",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 43127",
-    "lint": "eslint"
+    "lint": "eslint",
+    "train": "tsx --tsconfig tsconfig.json scripts/train-policy.ts",
+    "backtest:day": "tsx --tsconfig tsconfig.json scripts/run-backtest.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -29,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

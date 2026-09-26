@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# large regenerated Kalshi day caches (trained policy is tracked)
+/data/day-cache/

@@ -9,15 +9,34 @@ export type SettledMarket = KalshiMarket & {
   result: "yes" | "no";
 };
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`${res.status} ${url}`);
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function getJson<T>(url: string, retries = 6): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (res.status === 429 || res.status >= 500) {
+        const backoff = Math.min(30_000, 1000 * 2 ** attempt);
+        await sleep(backoff);
+        lastError = new Error(`${res.status} ${url}`);
+        continue;
+      }
+      if (!res.ok) {
+        throw new Error(`${res.status} ${url}`);
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      await sleep(Math.min(30_000, 1000 * 2 ** attempt));
+    }
   }
-  return (await res.json()) as T;
+  throw lastError ?? new Error(`Failed ${url}`);
 }
 
 export async function fetchSettledMarketsForDay(opts: {
@@ -25,7 +44,7 @@ export async function fetchSettledMarketsForDay(opts: {
   endTs: number;
   maxPages?: number;
 }): Promise<SettledMarket[]> {
-  const maxPages = opts.maxPages ?? 8;
+  const maxPages = opts.maxPages ?? 5;
   const out: SettledMarket[] = [];
   let cursor = "";
 
@@ -50,6 +69,7 @@ export async function fetchSettledMarketsForDay(opts: {
     }
     cursor = data.cursor ?? "";
     if (!cursor || batch.length === 0) break;
+    await sleep(250);
   }
 
   return out;
@@ -211,7 +231,7 @@ export async function buildHistoricalQuotes(opts: {
 
   const seriesCache = new Map<string, string | null>();
 
-  const quotes = await mapPool(ranked, 6, async (market) => {
+  const quotes = await mapPool(ranked, 3, async (market) => {
     let series = seriesCache.get(market.event_ticker);
     if (series === undefined) {
       series = await fetchSeriesTicker(market.event_ticker);

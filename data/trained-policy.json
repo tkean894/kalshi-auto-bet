@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "trainedAt": "2026-09-26T20:16:26.605Z",
+  "trainDates": [
+    "2026-09-16",
+    "2026-09-17",
+    "2026-09-18",
+    "2026-09-19",
+    "2026-09-20",
+    "2026-09-21",
+    "2026-09-22"
+  ],
+  "holdoutDates": [
+    "2026-09-23",
+    "2026-09-24",
+    "2026-09-25"
+  ],
+  "bankroll": 1000,
+  "maxTrade": 25,
+  "rules": [
+    {
+      "strategyId": "tight-spread",
+      "enabled": false,
+      "minEdgeScore": 50,
+      "maxEntryPrice": 0.35,
+      "rankBoost": 0
+    },
+    {
+      "strategyId": "momentum",
+      "enabled": true,
+      "minEdgeScore": 50,
+      "maxEntryPrice": null,
+      "rankBoost": 0
+    },
+    {
+      "strategyId": "mean-reversion",
+      "enabled": false,
+      "minEdgeScore": 65,
+      "maxEntryPrice": 0.35,
+      "rankBoost": 0
+    },
+    {
+      "strategyId": "favorite-edge",
+      "enabled": true,
+      "minEdgeScore": 50,
+      "maxEntryPrice": null,
+      "rankBoost": 0
+    },
+    {
+      "strategyId": "longshot-value",
+      "enabled": false,
+      "minEdgeScore": 50,
+      "maxEntryPrice": null,
+      "rankBoost": 0
+    },
+    {
+      "strategyId": "liquidity",
+      "enabled": false,
+      "minEdgeScore": 50,
+      "maxEntryPrice": 0.35,
+      "rankBoost": 0
+    }
+  ],
+  "objective": "total_pnl",
+  "trainMetrics": {
+    "dates": [
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18",
+      "2026-09-19",
+      "2026-09-20",
+      "2026-09-21",
+      "2026-09-22"
+    ],
+    "trades": 252,
+    "wins": 210,
+    "losses": 42,
+    "hitRate": 0.8333333333333334,
+    "totalCost": 6174.6900000000005,
+    "totalPayout": 6509,
+    "pnl": 334.30999999999983,
+    "roi": 0.04775857142857141,
+    "byStrategy": [
+      {
+        "strategyId": "momentum",
+        "trades": 168,
+        "wins": 137,
+        "pnl": 238.29999999999998
+      },
+      {
+        "strategyId": "favorite-edge",
+        "trades": 84,
+        "wins": 73,
+        "pnl": 96.01
+      }
+    ],
+    "byDate": [
+      {
+        "date": "2026-09-16",
+        "trades": 27,
+        "wins": 22,
+        "pnl": 55.95
+      },
+      {
+        "date": "2026-09-17",
+        "trades": 30,
+        "wins": 23,
+        "pnl": -47.95000000000001
+      },
+      {
+        "date": "2026-09-18",
+        "trades": 41,
+        "wins": 28,
+        "pnl": -204
+      },
+      {
+        "date": "2026-09-19",
+        "trades": 41,
+        "wins": 35,
+        "pnl": 139.54000000000005
+      },
+      {
+        "date": "2026-09-20",
+        "trades": 41,
+        "wins": 38,
+        "pnl": 173.61000000000004
+      },
+      {
+        "date": "2026-09-21",
+        "trades": 37,
+        "wins": 34,
+        "pnl": 68.09000000000002
+      },
+      {
+        "date": "2026-09-22",
+        "trades": 35,
+        "wins": 30,
+        "pnl": 149.07000000000002
+      }
+    ]
+  },
+  "holdoutBaseline": {
+    "dates": [
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+    ],
+    "trades": 126,
+    "wins": 58,
+    "losses": 68,
+    "hitRate": 0.4603174603174603,
+    "totalCost": 2999.96,
+    "totalPayout": 2446,
+    "pnl": -553.9599999999997,
+    "roi": -0.18465333333333322,
+    "byStrategy": [
+      {
+        "strategyId": "momentum",
+        "trades": 52,
+        "wins": 49,
+        "pnl": 277.08
+      },
+      {
+        "strategyId": "longshot-value",
+        "trades": 2,
+        "wins": 0,
+        "pnl": -0.21000000000000002
+      },
+      {
+        "strategyId": "liquidity",
+        "trades": 72,
+        "wins": 9,
+        "pnl": -830.8299999999998
+      }
+    ],
+    "byDate": [
+      {
+        "date": "2026-09-23",
+        "trades": 42,
+        "wins": 16,
+        "pnl": -260.9899999999999
+      },
+      {
+        "date": "2026-09-24",
+        "trades": 42,
+        "wins": 22,
+        "pnl": -161.97000000000006
+      },
+      {
+        "date": "2026-09-25",
+        "trades": 42,
+        "wins": 20,
+        "pnl": -131
+      }
+    ]
+  },
+  "holdoutTrained": {
+    "dates": [
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+    ],
+    "trades": 118,
+    "wins": 108,
+    "losses": 10,
+    "hitRate": 0.9152542372881356,
+    "totalCost": 2898.5100000000025,
+    "totalPayout": 3337,
+    "pnl": 438.4900000000002,
+    "roi": 0.1461633333333334,
+    "byStrategy": [
+      {
+        "strategyId": "momentum",
+        "trades": 72,
+        "wins": 64,
+        "pnl": 237.29999999999993
+      },
+      {
+        "strategyId": "favorite-edge",
+        "trades": 46,
+        "wins": 44,
+        "pnl": 201.18999999999997
+      }
+    ],
+    "byDate": [
+      {
+        "date": "2026-09-23",
+        "trades": 38,
+        "wins": 33,
+        "pnl": 119.85000000000002
+      },
+      {
+        "date": "2026-09-24",
+        "trades": 41,
+        "wins": 41,
+        "pnl": 229.08999999999997
+      },
+      {
+        "date": "2026-09-25",
+        "trades": 39,
+        "wins": 34,
+        "pnl": 89.55
+      }
+    ]
+  },
+  "notes": [
+    "Train dates (7): 2026-09-16, 2026-09-17, 2026-09-18, 2026-09-19, 2026-09-20, 2026-09-21, 2026-09-22",
+    "Holdout dates (3): 2026-09-23, 2026-09-24, 2026-09-25",
+    "Bankroll $1000, max trade $25, marketLimit 160",
+    "Solo train PnL by strategy: tight-spread=-213.40 (n=90, hit=26.7%); momentum=238.30 (n=168, hit=81.5%); mean-reversion=0.00 (n=0, hit=0.0%); favorite-edge=95.01 (n=121, hit=85.1%); longshot-value=-693.05 (n=157, hit=11.5%); liquidity=-1481.14 (n=133, hit=11.3%)",
+    "Enabled after training: momentum[minEdge=50, maxEntry=none, boost=0], favorite-edge[minEdge=50, maxEntry=none, boost=0]",
+    "All metrics computed from settled Kalshi markets via cached day quotes. Fees ignored."
+  ]
+}

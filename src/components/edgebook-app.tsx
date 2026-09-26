@@ -22,7 +22,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BacktestPanel } from "@/components/backtest-panel";
+import { TrainingPanel } from "@/components/training-panel";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
+import { filterAndRankSignals } from "@/lib/training/policy";
+import type { TrainedPolicy } from "@/lib/training/types";
 import {
   DEFAULT_DESK_SETTINGS,
   MIN_MAX_TRADE,
@@ -50,6 +53,7 @@ import {
   Activity,
   ArrowUpRight,
   Bot,
+  BrainCircuit,
   FlaskConical,
   LineChart,
   LoaderCircle,
@@ -127,6 +131,8 @@ export function EdgebookApp() {
   const [maxTradeDraft, setMaxTradeDraft] = useState(
     String(DEFAULT_DESK_SETTINGS.maxTrade),
   );
+  const [trainedPolicy, setTrainedPolicy] = useState<TrainedPolicy | null>(null);
+  const [useTrainedPolicy, setUseTrainedPolicy] = useState(true);
   const hasLoadedOnce = useRef(false);
   const autoPassRef = useRef(0);
 
@@ -148,6 +154,22 @@ export function EdgebookApp() {
     setSettings(loaded);
     setMaxTradeDraft(String(loaded.maxTrade));
     setSettingsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/training");
+        const data = (await res.json()) as { policy: TrainedPolicy | null };
+        if (!cancelled) setTrainedPolicy(data.policy);
+      } catch {
+        // optional
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -220,9 +242,16 @@ export function EdgebookApp() {
     [markets, matchesQuery],
   );
 
+  const policySignals = useMemo(() => {
+    if (useTrainedPolicy && trainedPolicy) {
+      return filterAndRankSignals(signals, trainedPolicy.rules);
+    }
+    return signals;
+  }, [signals, useTrainedPolicy, trainedPolicy]);
+
   const filteredSignals = useMemo(
-    () => signals.filter((signal) => matchesQuery(signal.market)),
-    [signals, matchesQuery],
+    () => policySignals.filter((signal) => matchesQuery(signal.market)),
+    [policySignals, matchesQuery],
   );
 
   const openFromSignal = (signal: StrategySignal) => {
@@ -262,7 +291,9 @@ export function EdgebookApp() {
       if (pass !== autoPassRef.current) return;
       autoTradeSignals(filteredSignals, {
         maxTrade: settings.maxTrade,
-        minEdgeScore: settings.minEdgeScore,
+        // Trained rules already enforce per-strategy min edges.
+        minEdgeScore:
+          useTrainedPolicy && trainedPolicy ? 0 : settings.minEdgeScore,
       });
     }, 250);
     return () => window.clearTimeout(t);
@@ -275,6 +306,8 @@ export function EdgebookApp() {
     loading,
     portfolio.cash,
     autoTradeSignals,
+    useTrainedPolicy,
+    trainedPolicy,
   ]);
 
   // Rescan while auto-trade is armed.
@@ -496,6 +529,10 @@ export function EdgebookApp() {
           <TabsTrigger value="backtest" className="gap-1.5">
             <FlaskConical className="size-3.5" />
             Backtest
+          </TabsTrigger>
+          <TabsTrigger value="training" className="gap-1.5">
+            <BrainCircuit className="size-3.5" />
+            Training
           </TabsTrigger>
           <TabsTrigger value="strategies" className="gap-1.5">
             <Activity className="size-3.5" />
@@ -977,6 +1014,24 @@ export function EdgebookApp() {
             minEdgeScore={settings.minEdgeScore}
             strategyId={strategyId}
           />
+        </TabsContent>
+
+        <TabsContent value="training">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card/95 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Apply trained policy live</p>
+              <p className="text-xs text-muted-foreground">
+                Filters Signals + auto-trade using learned enable / min-edge / entry
+                caps{trainedPolicy ? "" : " (train first — no policy loaded yet)"}.
+              </p>
+            </div>
+            <Switch
+              checked={useTrainedPolicy && !!trainedPolicy}
+              disabled={!trainedPolicy}
+              onCheckedChange={(checked) => setUseTrainedPolicy(checked)}
+            />
+          </div>
+          <TrainingPanel />
         </TabsContent>
 
         <TabsContent value="strategies" className="grid gap-3 md:grid-cols-2">

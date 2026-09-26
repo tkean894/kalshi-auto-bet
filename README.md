@@ -10,6 +10,7 @@ A Kalshi strategy desk: browse live markets, rank opportunities with pluggable s
 - Configurable paper **bankroll** and **max trade** size
 - **Auto-trade** that paper-fills ranked signals within those limits (rescan loop, min edge score)
 - **Previous-day backtest** against settled Kalshi markets (hit rate + P&L by strategy)
+- **Multi-day trainer** that fits strategy enable/min-edge/entry rules on settled data and reports holdout before vs after
 - Paper portfolio with localStorage persistence and mark-to-market P&L
 
 Auto-trade is **paper-only**. This app does **not** place live Kalshi orders. Live trading needs your API key + RSA private key and is intentionally left for a later step.
