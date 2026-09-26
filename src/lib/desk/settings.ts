@@ -35,8 +35,8 @@ export function normalizeDeskSettings(
         ? Math.min(1_000_000, bankroll)
         : DEFAULT_DESK_SETTINGS.bankroll,
     maxTrade:
-      Number.isFinite(maxTrade) && maxTrade > 0
-        ? Math.min(1_000_000, maxTrade)
+      Number.isFinite(maxTrade) && maxTrade >= 0.01
+        ? Math.min(1_000_000, Math.round(maxTrade * 100) / 100)
         : DEFAULT_DESK_SETTINGS.maxTrade,
     autoTrade: Boolean(partial?.autoTrade),
     minEdgeScore:

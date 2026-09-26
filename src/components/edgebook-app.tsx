@@ -117,6 +117,9 @@ export function EdgebookApp() {
   const [activeTab, setActiveTab] = useState("signals");
   const [settings, setSettings] = useState<DeskSettings>(DEFAULT_DESK_SETTINGS);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [maxTradeDraft, setMaxTradeDraft] = useState(
+    String(DEFAULT_DESK_SETTINGS.maxTrade),
+  );
   const hasLoadedOnce = useRef(false);
   const autoPassRef = useRef(0);
 
@@ -134,7 +137,9 @@ export function EdgebookApp() {
   } = usePaperPortfolio(markets);
 
   useEffect(() => {
-    setSettings(loadDeskSettings());
+    const loaded = loadDeskSettings();
+    setSettings(loaded);
+    setMaxTradeDraft(String(loaded.maxTrade));
     setSettingsHydrated(true);
   }, []);
 
@@ -371,7 +376,7 @@ export function EdgebookApp() {
             <StatTile
               label="Bankroll cash"
               value={hydrated ? formatUsd(portfolio.cash) : "—"}
-              hint={`Max ticket ${formatUsd(settings.maxTrade, 0)}`}
+              hint={`Max ticket ${formatUsd(settings.maxTrade)}`}
             />
             <StatTile
               label="Signals"
@@ -794,15 +799,30 @@ export function EdgebookApp() {
                 <Input
                   id="max-trade"
                   type="number"
-                  min={1}
-                  step={5}
-                  value={settings.maxTrade}
-                  onChange={(e) =>
-                    updateSettings({
-                      maxTrade: Number.parseFloat(e.target.value) || 0,
-                    })
-                  }
+                  min={0.01}
+                  step={0.01}
+                  inputMode="decimal"
+                  value={maxTradeDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setMaxTradeDraft(raw);
+                    const n = Number.parseFloat(raw);
+                    if (Number.isFinite(n) && n >= 0.01) {
+                      updateSettings({ maxTrade: n });
+                    }
+                  }}
+                  onBlur={() => {
+                    const next = normalizeDeskSettings({
+                      ...settings,
+                      maxTrade: Number.parseFloat(maxTradeDraft),
+                    });
+                    setSettings(next);
+                    setMaxTradeDraft(String(next.maxTrade));
+                  }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Minimum $0.01 — use decimals like 0.50 for small tickets.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="min-edge">Min edge score</Label>
