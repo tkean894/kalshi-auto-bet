@@ -45,6 +45,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -104,6 +105,7 @@ export function EdgebookApp() {
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
   const [activeTab, setActiveTab] = useState("signals");
+  const hasLoadedOnce = useRef(false);
 
   const {
     portfolio,
@@ -122,7 +124,7 @@ export function EdgebookApp() {
       else setRefreshing(true);
       try {
         const [marketsRes, signalsRes] = await Promise.all([
-          fetch(`/api/markets?limit=100${query ? `&q=${encodeURIComponent(query)}` : ""}`),
+          fetch("/api/markets?limit=100"),
           fetch(`/api/signals?strategy=${strategyId}&limit=100`),
         ]);
         const marketsJson = (await marketsRes.json()) as MarketsPayload;
@@ -134,6 +136,7 @@ export function EdgebookApp() {
         setStrategyMeta(signalsJson.strategy);
         setSource(marketsJson.source);
         setError(marketsJson.error ?? signalsJson.error ?? null);
+        hasLoadedOnce.current = true;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to refresh desk");
       } finally {
@@ -141,23 +144,36 @@ export function EdgebookApp() {
         setRefreshing(false);
       }
     },
-    [query, strategyId],
+    [strategyId],
   );
 
   useEffect(() => {
-    void load();
+    void load({ silent: hasLoadedOnce.current });
   }, [load]);
 
-  const filteredMarkets = useMemo(() => {
-    if (!query.trim()) return markets;
-    const q = query.trim().toLowerCase();
-    return markets.filter(
-      (m) =>
-        m.title.toLowerCase().includes(q) ||
-        m.ticker.toLowerCase().includes(q) ||
-        m.subtitle.toLowerCase().includes(q),
-    );
-  }, [markets, query]);
+  const matchesQuery = useCallback(
+    (market: MarketQuote) => {
+      if (!query.trim()) return true;
+      const q = query.trim().toLowerCase();
+      return (
+        market.title.toLowerCase().includes(q) ||
+        market.ticker.toLowerCase().includes(q) ||
+        market.subtitle.toLowerCase().includes(q) ||
+        market.eventTicker.toLowerCase().includes(q)
+      );
+    },
+    [query],
+  );
+
+  const filteredMarkets = useMemo(
+    () => markets.filter(matchesQuery),
+    [markets, matchesQuery],
+  );
+
+  const filteredSignals = useMemo(
+    () => signals.filter((signal) => matchesQuery(signal.market)),
+    [signals, matchesQuery],
+  );
 
   const openFromSignal = (signal: StrategySignal) => {
     setDraft({
@@ -199,9 +215,12 @@ export function EdgebookApp() {
   };
 
   const tickerTape = useMemo(() => {
-    const items = (signals.length ? signals : markets).slice(0, 12);
+    const items = (filteredSignals.length ? filteredSignals : filteredMarkets).slice(
+      0,
+      12,
+    );
     return [...items, ...items];
-  }, [signals, markets]);
+  }, [filteredSignals, filteredMarkets]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -266,7 +285,7 @@ export function EdgebookApp() {
             />
             <StatTile
               label="Signals"
-              value={loading ? "…" : String(signals.length)}
+              value={loading ? "…" : String(filteredSignals.length)}
               hint={strategyMeta?.name ?? "All strategies"}
             />
             <StatTile
@@ -330,8 +349,8 @@ export function EdgebookApp() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter markets…"
-            className="bg-card sm:w-56"
+            placeholder="Filter signals & markets…"
+            className="bg-card sm:w-64"
           />
           <Select
             value={strategyId}
@@ -377,7 +396,7 @@ export function EdgebookApp() {
             <div className="rounded-xl border border-border/80 bg-card/90 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-heading text-lg font-semibold">{strategyMeta.name}</h3>
-                <Badge variant="secondary">{signals.length} signals</Badge>
+                <Badge variant="secondary">{filteredSignals.length} signals</Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {strategyMeta.description}
@@ -387,15 +406,23 @@ export function EdgebookApp() {
 
           {loading ? (
             <EmptyState icon={<LoaderCircle className="animate-spin" />} title="Scanning markets…" />
-          ) : signals.length === 0 ? (
+          ) : filteredSignals.length === 0 ? (
             <EmptyState
               icon={<Target />}
-              title="No signals for this scanner"
-              body="Try another strategy or clear the filter — thin books get skipped."
+              title={
+                signals.length === 0
+                  ? "No signals for this scanner"
+                  : "No signals match this filter"
+              }
+              body={
+                signals.length === 0
+                  ? "Try another strategy or clear the filter — thin books get skipped."
+                  : "Clear the search box or try a different ticker / title fragment."
+              }
             />
           ) : (
             <div className="grid gap-3">
-              {signals.map((signal) => (
+              {filteredSignals.map((signal) => (
                 <article
                   key={signal.id}
                   className="group rounded-xl border border-border/80 bg-card/95 p-4 transition hover:border-edge/40 hover:shadow-[0_16px_40px_-28px_rgba(13,59,54,0.45)]"
@@ -684,7 +711,7 @@ export function EdgebookApp() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Entry ($)</Label>
+                  <Label>Entry (dollars)</Label>
                   <Input
                     type="number"
                     min={0.01}
