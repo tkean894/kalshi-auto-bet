@@ -19,8 +19,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
+import {
+  DEFAULT_DESK_SETTINGS,
+  loadDeskSettings,
+  normalizeDeskSettings,
+  saveDeskSettings,
+  sizeContracts,
+  type DeskSettings,
+} from "@/lib/desk/settings";
 import { formatCents, formatCompact, formatPct, formatUsd } from "@/lib/format";
 import type { MarketQuote } from "@/lib/kalshi/types";
 import {
@@ -34,6 +43,7 @@ import type {
 import {
   Activity,
   ArrowUpRight,
+  Bot,
   LineChart,
   LoaderCircle,
   RefreshCw,
@@ -105,7 +115,10 @@ export function EdgebookApp() {
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
   const [activeTab, setActiveTab] = useState("signals");
+  const [settings, setSettings] = useState<DeskSettings>(DEFAULT_DESK_SETTINGS);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const hasLoadedOnce = useRef(false);
+  const autoPassRef = useRef(0);
 
   const {
     portfolio,
@@ -116,7 +129,32 @@ export function EdgebookApp() {
     placeTrade,
     exitPosition,
     reset,
+    autoTradeSignals,
+    clearAutoTradeMemory,
   } = usePaperPortfolio(markets);
+
+  useEffect(() => {
+    setSettings(loadDeskSettings());
+    setSettingsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    saveDeskSettings(settings);
+  }, [settings, settingsHydrated]);
+
+  const updateSettings = useCallback((patch: Partial<DeskSettings>) => {
+    setSettings((prev) => normalizeDeskSettings({ ...prev, ...patch }));
+  }, []);
+
+  const contractsFor = useCallback(
+    (entryPrice: number, suggested?: number) => {
+      const sized = sizeContracts(entryPrice, settings.maxTrade, portfolio.cash);
+      if (sized > 0) return sized;
+      return Math.max(1, suggested ?? 1);
+    },
+    [settings.maxTrade, portfolio.cash],
+  );
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -181,7 +219,7 @@ export function EdgebookApp() {
       title: signal.market.title,
       side: signal.side,
       entryPrice: signal.entryPrice,
-      contracts: signal.suggestedContracts,
+      contracts: contractsFor(signal.entryPrice, signal.suggestedContracts),
       strategyId: signal.strategyId,
       rationale: signal.rationale,
     });
@@ -195,10 +233,47 @@ export function EdgebookApp() {
       title: market.title,
       side,
       entryPrice: entry,
-      contracts: Math.max(1, Math.floor(25 / Math.max(entry, 0.01))),
+      contracts: contractsFor(entry),
       strategyId: "manual",
     });
   };
+
+  // Auto-trade: paper-fill ranked signals within bankroll / max trade.
+  useEffect(() => {
+    if (!settings.autoTrade || !hydrated || loading) return;
+    if (filteredSignals.length === 0) return;
+    if (portfolio.cash < 0.01) return;
+
+    const pass = ++autoPassRef.current;
+    // Defer one tick so mark-to-market effects settle first.
+    const t = window.setTimeout(() => {
+      if (pass !== autoPassRef.current) return;
+      autoTradeSignals(filteredSignals, {
+        maxTrade: settings.maxTrade,
+        minEdgeScore: settings.minEdgeScore,
+      });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [
+    settings.autoTrade,
+    settings.maxTrade,
+    settings.minEdgeScore,
+    filteredSignals,
+    hydrated,
+    loading,
+    portfolio.cash,
+    autoTradeSignals,
+  ]);
+
+  // Rescan while auto-trade is armed.
+  useEffect(() => {
+    if (!settings.autoTrade) return;
+    const ms = settings.refreshSeconds * 1000;
+    const id = window.setInterval(() => {
+      void load({ silent: true });
+    }, ms);
+    return () => window.clearInterval(id);
+  }, [settings.autoTrade, settings.refreshSeconds, load]);
 
   const confirmTrade = () => {
     if (!draft) return;
@@ -243,8 +318,8 @@ export function EdgebookApp() {
                 Edgebook
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-relaxed text-primary-foreground/80 sm:text-base">
-                Scan live Kalshi markets, rank bets with pluggable strategies, and
-                paper-trade the tickets before you risk real capital.
+                Set a bankroll and max ticket size, then arm auto-trade to
+                paper-fill ranked Kalshi signals within those limits.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -261,6 +336,14 @@ export function EdgebookApp() {
                 ) : null}
                 Run scanners
                 <ArrowUpRight data-icon="inline-end" />
+              </Button>
+              <Button
+                variant="outline"
+                className="border-white/25 bg-white/5 text-primary-foreground hover:bg-white/10"
+                onClick={() => setActiveTab("risk")}
+              >
+                <Bot data-icon="inline-start" />
+                {settings.autoTrade ? "Auto-trade on" : "Risk & auto-trade"}
               </Button>
               <Button
                 variant="outline"
@@ -286,9 +369,9 @@ export function EdgebookApp() {
               tone={pnl >= 0 ? "gain" : "loss"}
             />
             <StatTile
-              label="Open tickets"
-              value={hydrated ? String(portfolio.positions.length) : "—"}
-              hint={`${formatUsd(portfolio.cash)} cash`}
+              label="Bankroll cash"
+              value={hydrated ? formatUsd(portfolio.cash) : "—"}
+              hint={`Max ticket ${formatUsd(settings.maxTrade, 0)}`}
             />
             <StatTile
               label="Signals"
@@ -296,12 +379,14 @@ export function EdgebookApp() {
               hint={strategyMeta?.name ?? "All strategies"}
             />
             <StatTile
-              label="Data"
-              value={source === "live" ? "Live" : "Demo"}
+              label="Auto-trade"
+              value={settings.autoTrade ? "Armed" : "Off"}
               hint={
-                source === "live"
-                  ? "Kalshi public API"
-                  : "Mock fallback active"
+                settings.autoTrade
+                  ? `Edge ≥ ${settings.minEdgeScore} · every ${settings.refreshSeconds}s`
+                  : source === "live"
+                    ? "Kalshi public API"
+                    : "Demo markets"
               }
             />
           </div>
@@ -348,8 +433,8 @@ export function EdgebookApp() {
             Trading desk
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Strategies rank opportunities. Paper trades stay local in your browser —
-            nothing hits Kalshi until you wire API keys later.
+            Strategies rank opportunities. Auto-trade paper-fills within your
+            bankroll and max ticket — still simulated in this browser, not live Kalshi orders.
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -391,6 +476,10 @@ export function EdgebookApp() {
           <TabsTrigger value="paper" className="gap-1.5">
             <Wallet className="size-3.5" />
             Paper desk
+          </TabsTrigger>
+          <TabsTrigger value="risk" className="gap-1.5">
+            <Bot className="size-3.5" />
+            Risk & auto
           </TabsTrigger>
           <TabsTrigger value="strategies" className="gap-1.5">
             <Activity className="size-3.5" />
@@ -475,7 +564,7 @@ export function EdgebookApp() {
                         <div className="mt-1 flex justify-between gap-4">
                           <span className="text-muted-foreground">Size</span>
                           <span className="font-mono font-medium">
-                            {signal.suggestedContracts} cts
+                            {contractsFor(signal.entryPrice, signal.suggestedContracts)} cts
                           </span>
                         </div>
                       </div>
@@ -570,8 +659,12 @@ export function EdgebookApp() {
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-heading text-lg font-semibold">Open positions</h3>
-            <Button variant="outline" size="sm" onClick={reset}>
-              Reset paper desk
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reset(settings.bankroll)}
+            >
+              Reset to {formatUsd(settings.bankroll, 0)}
             </Button>
           </div>
 
@@ -579,7 +672,7 @@ export function EdgebookApp() {
             <EmptyState
               icon={<Wallet />}
               title="No open paper tickets"
-              body="Accept a signal or buy YES/NO from the markets tab."
+              body="Arm auto-trade under Risk & auto, or paper-buy from Signals / Markets."
             />
           ) : (
             <div className="grid gap-3">
@@ -646,6 +739,169 @@ export function EdgebookApp() {
                 ))}
               </ul>
             )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="risk" className="space-y-4">
+          <div className="rounded-xl border border-border/80 bg-card/95 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="font-heading text-xl font-semibold">Risk controls</h3>
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Bankroll sets paper cash on reset. Max trade caps every ticket
+                  (manual and auto). Auto-trade paper-buys ranked signals until cash runs out.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-secondary/50 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Auto-trade</p>
+                  <p className="text-xs text-muted-foreground">
+                    {settings.autoTrade ? "Armed — paper fills only" : "Off"}
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.autoTrade}
+                  onCheckedChange={(checked) => {
+                    if (checked) clearAutoTradeMemory();
+                    updateSettings({ autoTrade: checked });
+                    if (checked) {
+                      setActiveTab("paper");
+                      void load({ silent: true });
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="bankroll">Bankroll ($)</Label>
+                <Input
+                  id="bankroll"
+                  type="number"
+                  min={1}
+                  step={50}
+                  value={settings.bankroll}
+                  onChange={(e) =>
+                    updateSettings({
+                      bankroll: Number.parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="max-trade">Max trade ($)</Label>
+                <Input
+                  id="max-trade"
+                  type="number"
+                  min={1}
+                  step={5}
+                  value={settings.maxTrade}
+                  onChange={(e) =>
+                    updateSettings({
+                      maxTrade: Number.parseFloat(e.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="min-edge">Min edge score</Label>
+                <Input
+                  id="min-edge"
+                  type="number"
+                  min={0}
+                  max={99}
+                  step={1}
+                  value={settings.minEdgeScore}
+                  onChange={(e) =>
+                    updateSettings({
+                      minEdgeScore: Number.parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="refresh-sec">Rescan every (sec)</Label>
+                <Input
+                  id="refresh-sec"
+                  type="number"
+                  min={15}
+                  max={600}
+                  step={5}
+                  value={settings.refreshSeconds}
+                  onChange={(e) =>
+                    updateSettings({
+                      refreshSeconds: Number.parseInt(e.target.value, 10) || 45,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  clearAutoTradeMemory();
+                  reset(settings.bankroll);
+                  setActiveTab("paper");
+                }}
+              >
+                Apply bankroll & reset desk
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearAutoTradeMemory();
+                  updateSettings({ autoTrade: true });
+                  setActiveTab("paper");
+                  void load({ silent: true });
+                }}
+              >
+                Arm auto-trade now
+              </Button>
+            </div>
+
+            <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-950">
+              Auto-trade is paper-only. It sizes each fill to at most your max trade,
+              never spends more cash than the current paper bankroll, and skips markets
+              you already hold. Live Kalshi orders are not placed.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/80 bg-card/95 px-4 py-3">
+              <p className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase">
+                Deployed
+              </p>
+              <p className="mt-1 font-heading text-xl font-semibold">
+                {formatUsd(Math.max(0, portfolio.startingCash - portfolio.cash))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                of {formatUsd(portfolio.startingCash, 0)} starting bankroll
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-card/95 px-4 py-3">
+              <p className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase">
+                Next ticket size
+              </p>
+              <p className="mt-1 font-heading text-xl font-semibold">
+                {formatUsd(Math.min(settings.maxTrade, portfolio.cash))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                min(max trade, remaining cash)
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-card/95 px-4 py-3">
+              <p className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase">
+                Open tickets
+              </p>
+              <p className="mt-1 font-heading text-xl font-semibold">
+                {portfolio.positions.length}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Strategy filter: {strategyMeta?.name ?? "All"}
+              </p>
+            </div>
           </div>
         </TabsContent>
 

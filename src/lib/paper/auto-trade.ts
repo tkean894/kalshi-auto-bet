@@ -1,0 +1,92 @@
+import { sizeContracts } from "@/lib/desk/settings";
+import type { StrategySignal } from "@/lib/strategies/types";
+import { openPosition } from "./portfolio";
+import type { PaperPortfolio } from "./types";
+
+export function positionKey(ticker: string, side: string): string {
+  return `${ticker}:${side}`;
+}
+
+export type AutoTradeResult = {
+  portfolio: PaperPortfolio;
+  tradedKeys: string[];
+  fillCount: number;
+  spent: number;
+  skipped: number;
+};
+
+/**
+ * Paper-fill top signals within maxTrade / available cash.
+ * Skips tickers already held or already auto-traded this session.
+ */
+export function runAutoTrade(
+  portfolio: PaperPortfolio,
+  signals: StrategySignal[],
+  opts: {
+    maxTrade: number;
+    minEdgeScore: number;
+    alreadyTraded: Set<string>;
+    maxFills?: number;
+  },
+): AutoTradeResult {
+  let next = portfolio;
+  const tradedKeys: string[] = [];
+  let spent = 0;
+  let skipped = 0;
+  const maxFills = opts.maxFills ?? 12;
+
+  const held = new Set(
+    next.positions.map((p) => positionKey(p.ticker, p.side)),
+  );
+
+  const ranked = [...signals].sort((a, b) => b.edgeScore - a.edgeScore);
+
+  for (const signal of ranked) {
+    if (tradedKeys.length >= maxFills) break;
+    if (signal.edgeScore < opts.minEdgeScore) {
+      skipped += 1;
+      continue;
+    }
+
+    const key = positionKey(signal.market.ticker, signal.side);
+    if (opts.alreadyTraded.has(key) || held.has(key) || tradedKeys.includes(key)) {
+      skipped += 1;
+      continue;
+    }
+
+    const contracts = sizeContracts(
+      signal.entryPrice,
+      opts.maxTrade,
+      next.cash,
+    );
+    if (contracts < 1) break;
+
+    const cost = contracts * signal.entryPrice;
+    const result = openPosition(next, {
+      ticker: signal.market.ticker,
+      title: signal.market.title,
+      side: signal.side,
+      contracts,
+      entryPrice: signal.entryPrice,
+      strategyId: signal.strategyId,
+    });
+
+    if (result.error) {
+      skipped += 1;
+      continue;
+    }
+
+    next = result.portfolio;
+    tradedKeys.push(key);
+    held.add(key);
+    spent += cost;
+  }
+
+  return {
+    portfolio: next,
+    tradedKeys,
+    fillCount: tradedKeys.length,
+    spent,
+    skipped,
+  };
+}

@@ -7,9 +7,11 @@ A Kalshi strategy desk: browse live markets, rank opportunities with pluggable s
 - Pulls open Kalshi markets from the public Trade API (`mve_filter=exclude`)
 - Falls back to demo markets if Kalshi is unreachable
 - Runs six heuristic strategies (tight spread, momentum, mean reversion, favorite edge, longshot value, liquidity)
-- Paper portfolio with $1,000 starting cash, localStorage persistence, mark-to-market P&L
+- Configurable paper **bankroll** and **max trade** size
+- **Auto-trade** that paper-fills ranked signals within those limits (rescan loop, min edge score)
+- Paper portfolio with localStorage persistence and mark-to-market P&L
 
-This first slice does **not** place live Kalshi orders. Live trading needs your API key + RSA private key and is intentionally left for a later step.
+Auto-trade is **paper-only**. This app does **not** place live Kalshi orders. Live trading needs your API key + RSA private key and is intentionally left for a later step.
 
 ## Run locally
 
