@@ -12,6 +12,7 @@ A Kalshi strategy desk: browse live markets, rank opportunities with pluggable s
 - **Previous-day backtest** against settled Kalshi markets (fee-aware net P&L + hit rate by strategy)
 - **Fee-aware walk-forward trainer** with intraday entry, category/path/volume features, logistic ranker, sizing, time-to-close filters, equity/drawdown metrics
 - **Retrain** from the Training tab (or `npm run train`) with divergence alerts
+- **Suggested max trade** from a bankroll-relative sweep on settled days (train-selected under a 25% drawdown budget, holdout-verified)
 - **Kalshi key gate** on Risk & auto — live orders stay locked; paper works without keys
 - Paper portfolio with localStorage persistence and mark-to-market P&L
 
@@ -47,6 +48,7 @@ KALSHI_PRIVATE_KEY=
 | `npm run start`   | Start production server                          |
 | `npm run lint`    | ESLint                                           |
 | `npm run train`   | Fee-aware walk-forward policy fit → `data/`      |
+| `npm run sweep:max-trade` | Prove best max-trade vs bankroll on cached days |
 | `npm run backtest:day` | Previous-day settled backtest               |
 
 ## Training notes

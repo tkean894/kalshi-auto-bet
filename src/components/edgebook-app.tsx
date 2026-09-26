@@ -22,6 +22,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BacktestPanel } from "@/components/backtest-panel";
+import { MaxTradeSuggestion } from "@/components/max-trade-suggestion";
 import { TrainingPanel } from "@/components/training-panel";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
 import type { KalshiCredentialStatus } from "@/lib/kalshi/credentials";
@@ -1135,6 +1136,21 @@ export function EdgebookApp() {
                   }
                 />
               </div>
+            </div>
+
+            <div className="mt-5">
+              <MaxTradeSuggestion
+                bankroll={settings.bankroll}
+                currentMaxTrade={settings.maxTrade}
+                onApply={(maxTrade) => {
+                  const next = normalizeDeskSettings({
+                    ...settings,
+                    maxTrade,
+                  });
+                  setSettings(next);
+                  setMaxTradeDraft(String(next.maxTrade));
+                }}
+              />
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">

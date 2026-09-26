@@ -1,0 +1,362 @@
+{
+  "version": 2,
+  "ranAt": "2026-09-26T21:32:36.295Z",
+  "bankroll": 1000,
+  "trainDates": [
+    "2026-09-12",
+    "2026-09-13",
+    "2026-09-14",
+    "2026-09-15",
+    "2026-09-16",
+    "2026-09-17",
+    "2026-09-18",
+    "2026-09-19",
+    "2026-09-20",
+    "2026-09-21"
+  ],
+  "holdoutDates": [
+    "2026-09-22",
+    "2026-09-23",
+    "2026-09-24",
+    "2026-09-25"
+  ],
+  "policySource": "trained",
+  "selectionRule": "eligible if train maxDrawdown <= 0.25*bankroll; among eligible, train score = 1000*netPnl - 250*maxDrawdown + 10*hitRate + 0.01*min(trades,50); pick argmax on train; report holdout for all",
+  "maxTrainDrawdownFrac": 0.25,
+  "suggested": {
+    "maxTrade": 30,
+    "fractionOfBankroll": 0.03,
+    "trainPnl": 1270.7759,
+    "holdoutPnl": 733.6374000000001,
+    "trainMaxDrawdown": 194.90240000000017,
+    "holdoutMaxDrawdown": 184.85105,
+    "eligible": true,
+    "vsNextBestEligible": {
+      "maxTrade": 25,
+      "trainPnlDelta": 213.15300000000025,
+      "holdoutPnlDelta": 122.12040000000013
+    },
+    "vsCurrentDefault": {
+      "maxTrade": 25,
+      "trainPnlDelta": 213.15300000000025,
+      "holdoutPnlDelta": 122.12040000000013
+    },
+    "vsUnconstrainedTrainChamp": {
+      "maxTrade": 150,
+      "trainPnlDelta": -5084.158600000001,
+      "holdoutPnlDelta": -2940.14845,
+      "note": "Unconstrained train champ $150 has train max DD 975.40 (>25% of bankroll); excluded."
+    }
+  },
+  "candidates": [
+    {
+      "maxTrade": 150,
+      "fractionOfBankroll": 0.15,
+      "source": "both",
+      "train": {
+        "pnl": 6354.9345,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 975.3968000000004,
+        "totalFees": 521.9654999999999,
+        "endingEquity": 7354.934499999999
+      },
+      "holdout": {
+        "pnl": 3673.78585,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 925.9937500000005,
+        "totalFees": 209.38415,
+        "endingEquity": 4673.78585
+      },
+      "trainScore": 6111088.6,
+      "holdoutScore": 3442292.1578846155
+    },
+    {
+      "maxTrade": 100,
+      "fractionOfBankroll": 0.1,
+      "source": "both",
+      "train": {
+        "pnl": 4236.175749999999,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 649.9161499999996,
+        "totalFees": 347.9742499999999,
+        "endingEquity": 5236.175749999999
+      },
+      "holdout": {
+        "pnl": 2449.5658000000003,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 617.3692999999998,
+        "totalFees": 139.5942,
+        "endingEquity": 3449.5658000000003
+      },
+      "trainScore": 4073700.012499999,
+      "holdoutScore": 2295228.220384616
+    },
+    {
+      "maxTrade": 75,
+      "fractionOfBankroll": 0.075,
+      "source": "both",
+      "train": {
+        "pnl": 3175.9843999999994,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 487.80144999999993,
+        "totalFees": 260.8956,
+        "endingEquity": 4175.984399999999
+      },
+      "holdout": {
+        "pnl": 1836.4958499999998,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 462.8209999999999,
+        "totalFees": 104.67415,
+        "endingEquity": 2836.4958500000002
+      },
+      "trainScore": 3054037.3374999994,
+      "holdoutScore": 1720795.3453846152
+    },
+    {
+      "maxTrade": 50,
+      "fractionOfBankroll": 0.05,
+      "source": "both",
+      "train": {
+        "pnl": 2116.83405,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 324.87765000000013,
+        "totalFees": 173.97595,
+        "endingEquity": 3116.834049999999
+      },
+      "holdout": {
+        "pnl": 1223.8582,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 308.65445,
+        "totalFees": 69.7818,
+        "endingEquity": 2223.8582
+      },
+      "trainScore": 2035617.9374999998,
+      "holdoutScore": 1146699.3328846153
+    },
+    {
+      "maxTrade": 40,
+      "fractionOfBankroll": 0.04,
+      "source": "both",
+      "train": {
+        "pnl": 1694.30725,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 259.4478999999999,
+        "totalFees": 139.14275,
+        "endingEquity": 2694.30725
+      },
+      "holdout": {
+        "pnl": 979.7176499999998,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 246.78295000000003,
+        "totalFees": 55.81235000000001,
+        "endingEquity": 1979.7176499999998
+      },
+      "trainScore": 1629448.5750000002,
+      "holdoutScore": 918026.6578846151
+    },
+    {
+      "maxTrade": 30,
+      "fractionOfBankroll": 0.03,
+      "source": "fraction",
+      "train": {
+        "pnl": 1270.7759,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 194.90240000000017,
+        "totalFees": 104.4041,
+        "endingEquity": 2270.7758999999996
+      },
+      "holdout": {
+        "pnl": 733.6374000000001,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 184.85105,
+        "totalFees": 41.8426,
+        "endingEquity": 1733.6373999999998
+      },
+      "trainScore": 1222053.6,
+      "holdoutScore": 687429.3828846155
+    },
+    {
+      "maxTrade": 25,
+      "fractionOfBankroll": 0.025,
+      "source": "both",
+      "train": {
+        "pnl": 1057.6228999999998,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 162.32079999999996,
+        "totalFees": 86.95710000000001,
+        "endingEquity": 2057.6229000000003
+      },
+      "holdout": {
+        "pnl": 611.5169999999999,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 154.1865499999999,
+        "totalFees": 34.883,
+        "endingEquity": 1611.5170000000003
+      },
+      "trainScore": 1017046,
+      "holdoutScore": 572975.1078846153
+    },
+    {
+      "maxTrade": 20,
+      "fractionOfBankroll": 0.02,
+      "source": "both",
+      "train": {
+        "pnl": 846.9126000000001,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 129.47264999999993,
+        "totalFees": 69.6074,
+        "endingEquity": 1846.9126
+      },
+      "holdout": {
+        "pnl": 489.3463999999999,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 123.26080000000002,
+        "totalFees": 27.933600000000002,
+        "endingEquity": 1489.3464000000001
+      },
+      "trainScore": 814547.7375000002,
+      "holdoutScore": 458535.9453846153
+    },
+    {
+      "maxTrade": 15,
+      "fractionOfBankroll": 0.015,
+      "source": "both",
+      "train": {
+        "pnl": 634.3728,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 97.50405,
+        "totalFees": 52.1872,
+        "endingEquity": 1634.3728
+      },
+      "holdout": {
+        "pnl": 366.7886499999999,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 92.25465000000008,
+        "totalFees": 20.94135,
+        "endingEquity": 1366.78865
+      },
+      "trainScore": 610000.0875,
+      "holdoutScore": 343729.73288461525
+    },
+    {
+      "maxTrade": 250,
+      "fractionOfBankroll": 0.25,
+      "source": "both",
+      "train": {
+        "pnl": 1541.7440000000001,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 4155.7469,
+        "totalFees": 595.0560000000002,
+        "endingEquity": 2541.744
+      },
+      "holdout": {
+        "pnl": 5056.0368,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 1061.4243999999999,
+        "totalFees": 235.32319999999999,
+        "endingEquity": 6056.036800000001
+      },
+      "trainScore": 502810.57500000024,
+      "holdoutScore": 4790685.445384615
+    },
+    {
+      "maxTrade": 10,
+      "fractionOfBankroll": 0.01,
+      "source": "both",
+      "train": {
+        "pnl": 423.82300000000004,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 64.29415000000017,
+        "totalFees": 34.777,
+        "endingEquity": 1423.8229999999999
+      },
+      "holdout": {
+        "pnl": 243.91924999999998,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 61.318899999999985,
+        "totalFees": 13.930749999999998,
+        "endingEquity": 1243.9192500000001
+      },
+      "trainScore": 407752.7625,
+      "holdoutScore": 228594.27038461535
+    },
+    {
+      "maxTrade": 5,
+      "fractionOfBankroll": 0.005,
+      "source": "both",
+      "train": {
+        "pnl": 212.02215,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 32.34555,
+        "totalFees": 17.407850000000003,
+        "endingEquity": 1212.02215
+      },
+      "holdout": {
+        "pnl": 121.1102,
+        "trades": 13,
+        "hitRate": 0.46153846153846156,
+        "maxDrawdown": 30.393150000000105,
+        "totalFees": 6.9298,
+        "endingEquity": 1121.1102
+      },
+      "trainScore": 203939.0625,
+      "holdoutScore": 113516.65788461539
+    },
+    {
+      "maxTrade": 1,
+      "fractionOfBankroll": 0.001,
+      "source": "absolute",
+      "train": {
+        "pnl": 40.424249999999994,
+        "trades": 30,
+        "hitRate": 0.3,
+        "maxDrawdown": 6.4340499999999565,
+        "totalFees": 3.42575,
+        "endingEquity": 1040.42425
+      },
+      "holdout": {
+        "pnl": 22.891199999999998,
+        "trades": 12,
+        "hitRate": 0.5,
+        "maxDrawdown": 5.917799999999943,
+        "totalFees": 1.3487999999999998,
+        "endingEquity": 1022.8912
+      },
+      "trainScore": 38819.037500000006,
+      "holdoutScore": 21416.87000000001
+    }
+  ],
+  "notes": [
+    "Selection: among sizes with train max DD ≤ 25% of bankroll ($250.00), maximize train fee-aware score (1000×netPnl − 250×maxDD); holdout is verification only.",
+    "Policy: trained rules from /workspace/data/trained-policy.json.",
+    "Bankroll $1000; tested 13 distinct max-trade sizes; 7 passed the DD budget.",
+    "Suggested max trade $30 (3.00% of bankroll).",
+    "Train P&L 1270.78 (DD 194.90) · holdout P&L 733.64 (DD 184.85).",
+    "vs next-best eligible $25: train Δ P&L 213.15, holdout Δ P&L 122.12.",
+    "vs desk default $25: train Δ P&L 213.15, holdout Δ P&L 122.12.",
+    "Unconstrained train champ $150 has train max DD 975.40 (>25% of bankroll); excluded."
+  ]
+}

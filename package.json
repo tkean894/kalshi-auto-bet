@@ -8,6 +8,7 @@
     "start": "next start --hostname 127.0.0.1 --port 43127",
     "lint": "eslint",
     "train": "tsx --tsconfig tsconfig.json scripts/train-policy.ts",
+    "sweep:max-trade": "tsx --tsconfig tsconfig.json scripts/sweep-max-trade.ts",
     "backtest:day": "tsx --tsconfig tsconfig.json scripts/run-backtest.ts"
   },
   "dependencies": {
