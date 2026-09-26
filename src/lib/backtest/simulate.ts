@@ -5,7 +5,9 @@ import {
   runAllStrategies,
   runStrategy,
 } from "@/lib/strategies/engine";
-import type { StrategyId } from "@/lib/strategies/types";
+import type { StrategyId, StrategySignal } from "@/lib/strategies/types";
+import { loadTrainedPolicy } from "@/lib/training/load-policy";
+import { filterAndRankSignals } from "@/lib/training/policy";
 import { dayWindowEt, previousDayWindowEt } from "./day-window";
 import {
   buildHistoricalQuotes,
@@ -21,6 +23,8 @@ export type BacktestOptions = {
   minEdgeScore?: number;
   strategy?: StrategyId | "all";
   marketLimit?: number;
+  /** When true, apply persisted trained policy filters (same as live Apply). */
+  useTrainedPolicy?: boolean;
 };
 
 function settleTrade(
@@ -70,19 +74,44 @@ export async function runDayBacktest(
     historical.map((h) => [h.market.ticker, h.market]),
   );
 
-  const signals =
+  let signals: StrategySignal[] =
     strategy === "all"
       ? runAllStrategies(quotes)
       : runStrategy(strategy, quotes);
 
+  let policyMode: "trained" | "baseline" = "baseline";
+  let fillMinEdge = minEdgeScore;
+
+  if (options.useTrainedPolicy) {
+    const policy = await loadTrainedPolicy();
+    if (policy) {
+      const before = signals.length;
+      signals = filterAndRankSignals(signals, policy.rules);
+      fillMinEdge = 0; // per-strategy mins already applied
+      policyMode = "trained";
+      notes.push(
+        `Applied trained policy (${before} → ${signals.length} signals). Enabled: ${policy.rules
+          .filter((r) => r.enabled)
+          .map((r) => r.strategyId)
+          .join(", ") || "none"}.`,
+      );
+    } else {
+      notes.push(
+        "Trained policy requested but trained-policy.json was missing — ran baseline instead.",
+      );
+    }
+  } else {
+    notes.push("Policy mode: baseline (trained filters not applied).");
+  }
+
   notes.push(
-    `Generated ${signals.length} signals (strategy=${strategy}, min edge applied at fill time=${minEdgeScore}).`,
+    `Generated ${signals.length} fillable signals (strategy=${strategy}, fill min edge=${fillMinEdge}).`,
   );
 
   const portfolio = createEmptyPortfolio(bankroll);
   const fill = runAutoTrade(portfolio, signals, {
     maxTrade,
-    minEdgeScore,
+    minEdgeScore: fillMinEdge,
     alreadyTraded: new Set(),
     maxFills: 200,
   });
@@ -167,8 +196,9 @@ export async function runDayBacktest(
     timezone: window.timezone,
     bankroll,
     maxTrade,
-    minEdgeScore,
+    minEdgeScore: fillMinEdge,
     strategy,
+    policyMode,
     marketsScanned: settled.length,
     marketsWithQuotes: historical.length,
     signalsGenerated: signals.length,

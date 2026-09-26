@@ -12,6 +12,8 @@ type Props = {
   maxTrade: number;
   minEdgeScore: number;
   strategyId: string;
+  useTrainedPolicy: boolean;
+  trainedPolicyAvailable: boolean;
 };
 
 export function BacktestPanel({
@@ -19,6 +21,8 @@ export function BacktestPanel({
   maxTrade,
   minEdgeScore,
   strategyId,
+  useTrainedPolicy,
+  trainedPolicyAvailable,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +38,7 @@ export function BacktestPanel({
         minEdge: String(minEdgeScore),
         strategy: strategyId,
         marketLimit: "180",
+        useTrained: useTrainedPolicy && trainedPolicyAvailable ? "1" : "0",
       });
       const res = await fetch(`/api/backtest?${params}`);
       const data = (await res.json()) as BacktestSummary & { error?: string };
@@ -60,10 +65,15 @@ export function BacktestPanel({
               Replays your current risk settings against markets that settled
               yesterday (ET): rebuilds pre-settlement quotes, runs scanners,
               paper-fills within bankroll / max trade, then settles wins and losses.
+              Uses the same Apply trained / Baseline policy setting as live.
             </p>
             <p className="font-mono text-xs text-muted-foreground">
               Using bankroll {formatUsd(bankroll)} · max trade {formatUsd(maxTrade)} ·
-              min edge {minEdgeScore} · strategy {strategyId}
+              min edge {minEdgeScore} · strategy {strategyId} · policy{" "}
+              {useTrainedPolicy && trainedPolicyAvailable ? "trained" : "baseline"}
+              {!trainedPolicyAvailable && useTrainedPolicy
+                ? " (trained unavailable)"
+                : ""}
             </p>
           </div>
           <Button onClick={() => void run()} disabled={loading}>
@@ -89,7 +99,7 @@ export function BacktestPanel({
             <Stat
               label="Day"
               value={summary.date}
-              hint={`${summary.timezone} · ${summary.marketsWithQuotes} quotes`}
+              hint={`${summary.timezone} · policy ${summary.policyMode}`}
             />
             <Stat
               label="Trades"

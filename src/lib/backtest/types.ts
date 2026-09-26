@@ -23,6 +23,8 @@ export type BacktestSummary = {
   maxTrade: number;
   minEdgeScore: number;
   strategy: StrategyId | "all";
+  /** Which live policy mode was used for this run. */
+  policyMode: "trained" | "baseline";
   marketsScanned: number;
   marketsWithQuotes: number;
   signalsGenerated: number;

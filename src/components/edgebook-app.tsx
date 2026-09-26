@@ -1070,6 +1070,8 @@ export function EdgebookApp() {
             maxTrade={settings.maxTrade}
             minEdgeScore={settings.minEdgeScore}
             strategyId={strategyId}
+            useTrainedPolicy={useTrainedPolicy}
+            trainedPolicyAvailable={!!trainedPolicy}
           />
         </TabsContent>
 

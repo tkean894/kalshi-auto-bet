@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
   const minEdgeScore = Number(searchParams.get("minEdge") ?? "55");
   const strategyParam = searchParams.get("strategy") ?? "all";
   const marketLimit = Number(searchParams.get("marketLimit") ?? "180");
+  const useTrainedPolicy =
+    searchParams.get("useTrained") === "1" ||
+    searchParams.get("useTrained") === "true";
 
   try {
     const summary = await runDayBacktest({
@@ -23,6 +26,7 @@ export async function GET(request: NextRequest) {
       strategy:
         strategyParam === "all" ? "all" : (strategyParam as StrategyId),
       marketLimit: Number.isFinite(marketLimit) ? marketLimit : 180,
+      useTrainedPolicy,
     });
     return NextResponse.json(summary);
   } catch (error) {
