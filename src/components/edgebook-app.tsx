@@ -250,8 +250,15 @@ export function EdgebookApp() {
             <div className="flex flex-wrap gap-2">
               <Button
                 className="animate-pulse-edge bg-edge text-edge-foreground hover:bg-edge/90"
-                onClick={() => setActiveTab("signals")}
+                onClick={() => {
+                  setActiveTab("signals");
+                  void load({ silent: hasLoadedOnce.current });
+                }}
+                disabled={loading || refreshing}
               >
+                {refreshing ? (
+                  <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                ) : null}
                 Run scanners
                 <ArrowUpRight data-icon="inline-end" />
               </Button>

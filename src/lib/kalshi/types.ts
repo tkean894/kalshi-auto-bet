@@ -16,6 +16,7 @@ export type KalshiMarket = {
   previous_yes_bid_dollars?: string;
   previous_yes_ask_dollars?: string;
   volume_fp?: string;
+  volume_24h_fp?: string;
   open_interest_fp?: string;
   liquidity_dollars?: string;
   close_time?: string;

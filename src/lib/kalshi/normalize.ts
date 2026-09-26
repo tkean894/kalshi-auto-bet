@@ -8,7 +8,11 @@ export function normalizeMarket(market: KalshiMarket): MarketQuote {
   const noAsk = parseDollars(market.no_ask_dollars);
   const lastPrice = parseDollars(market.last_price_dollars);
   const previousPrice = parseDollars(market.previous_price_dollars);
-  const volume = parseDollars(market.volume_fp);
+  // Prefer lifetime volume; fall back to 24h so brand-new series still rank.
+  const volume = Math.max(
+    parseDollars(market.volume_fp),
+    parseDollars(market.volume_24h_fp),
+  );
   const openInterest = parseDollars(market.open_interest_fp);
   const liquidity = parseDollars(market.liquidity_dollars);
 

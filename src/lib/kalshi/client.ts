@@ -7,34 +7,86 @@ const PRIMARY =
   "https://external-api.kalshi.com/trade-api/v2";
 const FALLBACK = "https://api.elections.kalshi.com/trade-api/v2";
 
+/** Kalshi's open-market feed leads with brand-new empty books; page deeper. */
+const PAGE_SIZE = 200;
+const MAX_PAGES = 8;
+
 type FetchMarketsOptions = {
   limit?: number;
   query?: string;
   cursor?: string;
 };
 
-async function fetchFromBase(
+function isScannable(market: MarketQuote): boolean {
+  return (
+    market.yesAsk > 0.01 &&
+    market.yesAsk < 0.99 &&
+    market.yesBid > 0 &&
+    (market.volume > 0 || market.openInterest > 0 || market.liquidity > 0)
+  );
+}
+
+async function fetchPage(
   base: string,
   options: FetchMarketsOptions,
-): Promise<MarketQuote[]> {
+): Promise<{ markets: MarketQuote[]; cursor: string | null }> {
   const params = new URLSearchParams({
     status: "open",
-    limit: String(Math.min(options.limit ?? 100, 200)),
+    limit: String(PAGE_SIZE),
     mve_filter: "exclude",
   });
   if (options.cursor) params.set("cursor", options.cursor);
 
   const res = await fetch(`${base}/markets?${params.toString()}`, {
     headers: { Accept: "application/json" },
-    next: { revalidate: 30 },
+    // Desk refresh must not serve a stale first page of empty books.
+    cache: "no-store",
   });
 
   if (!res.ok) {
     throw new Error(`Kalshi ${base} returned ${res.status}`);
   }
 
-  const data = (await res.json()) as { markets?: KalshiMarket[] };
-  return (data.markets ?? []).map(normalizeMarket);
+  const data = (await res.json()) as {
+    markets?: KalshiMarket[];
+    cursor?: string;
+  };
+  return {
+    markets: (data.markets ?? []).map(normalizeMarket),
+    cursor: data.cursor || null,
+  };
+}
+
+async function fetchFromBase(
+  base: string,
+  options: FetchMarketsOptions,
+): Promise<MarketQuote[]> {
+  const target = Math.max(options.limit ?? 80, 40);
+  const collected: MarketQuote[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined = options.cursor;
+  let pages = 0;
+
+  while (pages < MAX_PAGES) {
+    const page = await fetchPage(base, { ...options, cursor });
+    pages += 1;
+
+    for (const market of page.markets) {
+      if (seen.has(market.ticker)) continue;
+      seen.add(market.ticker);
+      collected.push(market);
+    }
+
+    const scannable = collected.filter(isScannable).length;
+    // Keep paging until we have enough books scanners can actually rank,
+    // or Kalshi runs out of pages.
+    if (scannable >= target || !page.cursor) {
+      break;
+    }
+    cursor = page.cursor;
+  }
+
+  return collected;
 }
 
 function filterMarkets(markets: MarketQuote[], query?: string): MarketQuote[] {
@@ -52,7 +104,12 @@ function filterMarkets(markets: MarketQuote[], query?: string): MarketQuote[] {
 function rankMarkets(markets: MarketQuote[]): MarketQuote[] {
   return [...markets].sort((a, b) => {
     const score = (m: MarketQuote) =>
-      m.volume * 2 + m.openInterest + (1 - m.spread) * 50 + (m.lastPrice > 0 ? 10 : 0);
+      m.volume * 2 +
+      m.openInterest +
+      m.liquidity * 0.5 +
+      (1 - m.spread) * 50 +
+      (m.lastPrice > 0 ? 10 : 0) +
+      (isScannable(m) ? 100 : 0);
     return score(b) - score(a);
   });
 }
@@ -74,6 +131,11 @@ export async function getMarkets(
         return { markets: [], source: "live", fetchedAt };
       }
       if (filtered.length === 0) {
+        continue;
+      }
+      // Prefer pages that actually include scannable books; otherwise try the
+      // alternate Kalshi host / mock fallback.
+      if (filtered.filter(isScannable).length === 0 && !options.query) {
         continue;
       }
       return { markets: filtered, source: "live", fetchedAt };
