@@ -838,7 +838,8 @@ export function EdgebookApp() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Minimum $0.05 (5¢). Example: 0.05 or 0.50.
+                  Minimum $0.05. One contract costs the full entry price (e.g. 40¢
+                  needs max trade ≥ 0.40) — $0.10 only fills ≤10¢ markets.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -899,9 +900,10 @@ export function EdgebookApp() {
             </div>
 
             <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-950">
-              Auto-trade is paper-only. It sizes each fill to at most your max trade,
-              never spends more cash than the current paper bankroll, and skips markets
-              you already hold. Live Kalshi orders are not placed.
+              Auto-trade is paper-only. Each Kalshi contract costs its entry price in
+              dollars (a 35¢ YES costs $0.35). Max trade must be at least that high to
+              buy one contract. It never spends more than your paper cash, and skips
+              markets you already hold. Live Kalshi orders are not placed.
             </p>
           </div>
 

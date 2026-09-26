@@ -13,11 +13,18 @@ export type AutoTradeResult = {
   fillCount: number;
   spent: number;
   skipped: number;
+  /** Eligible signals skipped because 1 contract costs more than max trade. */
+  skippedForSize: number;
+  /** Cheapest entry among size-blocked signals (dollars), if any. */
+  cheapestBlockedEntry: number | null;
 };
 
 /**
  * Paper-fill top signals within maxTrade / available cash.
  * Skips tickers already held or already auto-traded this session.
+ *
+ * Note: Kalshi contracts are whole units. A $0.10 max trade can only buy
+ * markets whose entry price is ≤ $0.10 (one contract costs the full entry).
  */
 export function runAutoTrade(
   portfolio: PaperPortfolio,
@@ -33,6 +40,8 @@ export function runAutoTrade(
   const tradedKeys: string[] = [];
   let spent = 0;
   let skipped = 0;
+  let skippedForSize = 0;
+  let cheapestBlockedEntry: number | null = null;
   const maxFills = opts.maxFills ?? 12;
 
   const held = new Set(
@@ -43,6 +52,8 @@ export function runAutoTrade(
 
   for (const signal of ranked) {
     if (tradedKeys.length >= maxFills) break;
+    if (next.cash < 0.01) break;
+
     if (signal.edgeScore < opts.minEdgeScore) {
       skipped += 1;
       continue;
@@ -59,7 +70,19 @@ export function runAutoTrade(
       opts.maxTrade,
       next.cash,
     );
-    if (contracts < 1) break;
+
+    if (contracts < 1) {
+      // Keep scanning — a later (cheaper) signal may fit under max trade.
+      skipped += 1;
+      skippedForSize += 1;
+      if (
+        cheapestBlockedEntry == null ||
+        signal.entryPrice < cheapestBlockedEntry
+      ) {
+        cheapestBlockedEntry = signal.entryPrice;
+      }
+      continue;
+    }
 
     const cost = contracts * signal.entryPrice;
     const result = openPosition(next, {
@@ -88,5 +111,7 @@ export function runAutoTrade(
     fillCount: tradedKeys.length,
     spent,
     skipped,
+    skippedForSize,
+    cheapestBlockedEntry,
   };
 }

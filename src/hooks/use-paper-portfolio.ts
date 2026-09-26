@@ -42,6 +42,7 @@ export function usePaperPortfolio(markets: MarketQuote[]) {
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const autoTradedRef = useRef<Set<string>>(new Set());
+  const lastSizeToastAtRef = useRef(0);
 
   useEffect(() => {
     setPortfolio(loadPortfolio());
@@ -138,6 +139,18 @@ export function usePaperPortfolio(markets: MarketQuote[]) {
           );
         } else if (prev.cash < 0.01) {
           setToast("Auto-trade paused — bankroll cash is spent");
+        } else if (result.skippedForSize > 0) {
+          const now = Date.now();
+          if (now - lastSizeToastAtRef.current > 12_000) {
+            lastSizeToastAtRef.current = now;
+            const need =
+              result.cheapestBlockedEntry != null
+                ? ` Cheapest signal needs $${result.cheapestBlockedEntry.toFixed(2)} for 1 contract.`
+                : "";
+            setToast(
+              `Nothing filled — max trade $${opts.maxTrade.toFixed(2)} is below contract prices.${need} Raise max trade.`,
+            );
+          }
         }
         return result.portfolio;
       });
