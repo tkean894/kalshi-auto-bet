@@ -6,7 +6,7 @@ export const EDGE_SCORE_SUMMARY = {
   title: "What is an edge score?",
   body: "Edge score is a 0–99 rank each scanner assigns to a market. Higher means the strategy likes that ticket more relative to others right now — it is not a predicted win rate or guaranteed profit.",
   confidence:
-    "Confidence bands: low under 55, medium 55–71, high 72+. Auto-trade’s “Min edge score” filters out weaker ranks.",
+    "Confidence bands: low under 55, medium 55–71, high 72+. Auto-trade’s “Min edge score” filters out weaker ranks. Tickets at or under 28¢ are longshot-only — other strategies will not signal them.",
 };
 
 export const EDGE_SCORE_BY_STRATEGY: {
@@ -42,12 +42,12 @@ export const EDGE_SCORE_BY_STRATEGY: {
     id: "longshot-value",
     name: "Longshot Value",
     formula:
-      "For cheap YES (about 5–28¢): higher when the ask is cheaper, volume is present, and the spread is tighter.",
+      "Exclusive owner of cheap YES (about 5–28¢): higher when the ask is cheaper, volume is present, and the spread is tighter. Other strategies skip this price band.",
   },
   {
     id: "liquidity",
     name: "Liquidity Sweep",
     formula:
-      "Log-scales volume, open interest, and liquidity dollars, then adds a tighter-spread bonus — deepest books rank first.",
+      "Log-scales volume, open interest, and liquidity dollars, then adds a tighter-spread bonus. Skips ≤28¢ entries (longshot-only).",
   },
 ];
