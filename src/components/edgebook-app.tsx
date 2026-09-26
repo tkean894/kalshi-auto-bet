@@ -24,12 +24,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
 import {
   DEFAULT_DESK_SETTINGS,
+  MIN_MAX_TRADE,
   loadDeskSettings,
   normalizeDeskSettings,
   saveDeskSettings,
   sizeContracts,
   type DeskSettings,
 } from "@/lib/desk/settings";
+import {
+  EDGE_SCORE_BY_STRATEGY,
+  EDGE_SCORE_SUMMARY,
+} from "@/lib/strategies/edge-score";
 import { formatCents, formatCompact, formatPct, formatUsd } from "@/lib/format";
 import type { MarketQuote } from "@/lib/kalshi/types";
 import {
@@ -502,6 +507,18 @@ export function EdgebookApp() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {strategyMeta.description}
               </p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">Edge score:</span>{" "}
+                {EDGE_SCORE_SUMMARY.body} See{" "}
+                <button
+                  type="button"
+                  className="font-medium text-edge underline-offset-2 hover:underline"
+                  onClick={() => setActiveTab("risk")}
+                >
+                  Risk & auto
+                </button>{" "}
+                for per-strategy formulas.
+              </p>
             </div>
           ) : null}
 
@@ -799,7 +816,7 @@ export function EdgebookApp() {
                 <Input
                   id="max-trade"
                   type="number"
-                  min={0.01}
+                  min={MIN_MAX_TRADE}
                   step={0.01}
                   inputMode="decimal"
                   value={maxTradeDraft}
@@ -807,7 +824,7 @@ export function EdgebookApp() {
                     const raw = e.target.value;
                     setMaxTradeDraft(raw);
                     const n = Number.parseFloat(raw);
-                    if (Number.isFinite(n) && n >= 0.01) {
+                    if (Number.isFinite(n) && n >= MIN_MAX_TRADE) {
                       updateSettings({ maxTrade: n });
                     }
                   }}
@@ -821,7 +838,7 @@ export function EdgebookApp() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Minimum $0.01 — use decimals like 0.50 for small tickets.
+                  Minimum $0.05 (5¢). Example: 0.05 or 0.50.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -886,6 +903,26 @@ export function EdgebookApp() {
               never spends more cash than the current paper bankroll, and skips markets
               you already hold. Live Kalshi orders are not placed.
             </p>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-card/95 p-4 sm:p-5">
+            <h3 className="font-heading text-xl font-semibold">
+              {EDGE_SCORE_SUMMARY.title}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {EDGE_SCORE_SUMMARY.body}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {EDGE_SCORE_SUMMARY.confidence}
+            </p>
+            <ul className="mt-4 space-y-3">
+              {EDGE_SCORE_BY_STRATEGY.map((item) => (
+                <li key={item.id} className="text-sm">
+                  <p className="font-medium text-foreground">{item.name}</p>
+                  <p className="text-muted-foreground">{item.formula}</p>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">

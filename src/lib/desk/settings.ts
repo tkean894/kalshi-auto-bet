@@ -13,6 +13,9 @@ export type DeskSettings = {
 
 export const DESK_SETTINGS_KEY = "edgebook-desk-settings-v1";
 
+/** Smallest allowed max-trade in dollars ($0.05 = 5¢). */
+export const MIN_MAX_TRADE = 0.05;
+
 export const DEFAULT_DESK_SETTINGS: DeskSettings = {
   bankroll: 1000,
   maxTrade: 25,
@@ -35,7 +38,7 @@ export function normalizeDeskSettings(
         ? Math.min(1_000_000, bankroll)
         : DEFAULT_DESK_SETTINGS.bankroll,
     maxTrade:
-      Number.isFinite(maxTrade) && maxTrade >= 0.01
+      Number.isFinite(maxTrade) && maxTrade >= MIN_MAX_TRADE
         ? Math.min(1_000_000, Math.round(maxTrade * 100) / 100)
         : DEFAULT_DESK_SETTINGS.maxTrade,
     autoTrade: Boolean(partial?.autoTrade),
