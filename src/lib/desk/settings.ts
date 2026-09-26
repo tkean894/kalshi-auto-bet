@@ -72,13 +72,22 @@ export function saveDeskSettings(settings: DeskSettings) {
   );
 }
 
-/** Contracts affordable under max trade and available cash. */
+/**
+ * Contracts affordable under max trade and available cash.
+ * Optional edgeScore scales budget (higher edge → larger size, floor 35%).
+ */
 export function sizeContracts(
   entryPrice: number,
   maxTrade: number,
   cash: number,
+  opts?: { sizeMult?: number; edgeScore?: number; edgeSized?: boolean },
 ): number {
   if (!(entryPrice > 0) || !(maxTrade > 0) || !(cash > 0)) return 0;
-  const budget = Math.min(maxTrade, cash);
+  const mult = opts?.sizeMult && opts.sizeMult > 0 ? opts.sizeMult : 1;
+  let budget = Math.min(maxTrade * mult, cash);
+  if (opts?.edgeSized && opts.edgeScore != null) {
+    const scale = Math.max(0.35, Math.min(1, opts.edgeScore / 100));
+    budget *= scale;
+  }
   return Math.max(0, Math.floor(budget / entryPrice + 1e-9));
 }

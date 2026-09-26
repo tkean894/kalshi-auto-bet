@@ -1,4 +1,5 @@
 import { midPrice, parseDollars, spreadWidth } from "@/lib/format";
+import { normalizeCategory } from "@/lib/trading/features";
 import type { KalshiMarket, MarketQuote } from "./types";
 
 export function normalizeMarket(market: KalshiMarket): MarketQuote {
@@ -34,5 +35,6 @@ export function normalizeMarket(market: KalshiMarket): MarketQuote {
     closeTime: market.close_time ?? null,
     mid: midPrice(yesBid, yesAsk) || lastPrice,
     spread: spreadWidth(yesBid, yesAsk),
+    category: normalizeCategory(market.category),
   };
 }

@@ -6,8 +6,9 @@ import {
   runStrategy,
 } from "@/lib/strategies/engine";
 import type { StrategyId, StrategySignal } from "@/lib/strategies/types";
+import { netPnlAfterCosts } from "@/lib/trading/costs";
 import { loadTrainedPolicy } from "@/lib/training/load-policy";
-import { filterAndRankSignals } from "@/lib/training/policy";
+import { filterAndRankSignals, ruleMap } from "@/lib/training/policy";
 import { dayWindowEt, previousDayWindowEt } from "./day-window";
 import {
   buildHistoricalQuotes,
@@ -26,18 +27,6 @@ export type BacktestOptions = {
   /** When true, apply persisted trained policy filters (same as live Apply). */
   useTrainedPolicy?: boolean;
 };
-
-function settleTrade(
-  side: "yes" | "no",
-  result: "yes" | "no",
-  contracts: number,
-  entryPrice: number,
-): { hit: boolean; payout: number; pnl: number } {
-  const hit = side === result;
-  const payout = hit ? contracts * 1 : 0;
-  const cost = contracts * entryPrice;
-  return { hit, payout, pnl: payout - cost };
-}
 
 export async function runDayBacktest(
   options: BacktestOptions = {},
@@ -66,12 +55,21 @@ export async function runDayBacktest(
     limit: options.marketLimit ?? 180,
   });
   notes.push(
-    `Rebuilt ${historical.length} as-of quotes from hourly candlesticks (top volume markets).`,
+    `Rebuilt ${historical.length} as-of quotes from hourly candlesticks (intraday entry ~55% of session).`,
   );
 
-  const quotes = historical.map((h) => h.quote);
+  const quotes = historical.map((h) => ({
+    ...h.quote,
+    category: h.category,
+  }));
   const resultByTicker = new Map<string, SettledMarket>(
     historical.map((h) => [h.market.ticker, h.market]),
+  );
+  const featuresByTicker = new Map(
+    historical.map((h) => [h.market.ticker, h.features] as const),
+  );
+  const categoryByTicker = new Map(
+    historical.map((h) => [h.market.ticker, h.category] as const),
   );
 
   let signals: StrategySignal[] =
@@ -81,19 +79,32 @@ export async function runDayBacktest(
 
   let policyMode: "trained" | "baseline" = "baseline";
   let fillMinEdge = minEdgeScore;
+  let sizeMultByStrategy: Map<StrategyId, number> | undefined;
+  let maxPerEvent = 1;
+  let maxPerCategory = 3;
+  let logistic = null as import("@/lib/training/logistic").LogisticModel | null;
 
   if (options.useTrainedPolicy) {
     const policy = await loadTrainedPolicy();
     if (policy) {
       const before = signals.length;
-      signals = filterAndRankSignals(signals, policy.rules);
-      fillMinEdge = 0; // per-strategy mins already applied
+      logistic = policy.logistic;
+      signals = filterAndRankSignals(signals, {
+        rules: policy.rules,
+        logistic,
+        featuresByTicker,
+      });
+      fillMinEdge = 0;
       policyMode = "trained";
+      sizeMultByStrategy = new Map(
+        [...ruleMap(policy.rules).entries()].map(
+          ([id, r]) => [id, r.sizeMult] as const,
+        ),
+      );
+      maxPerEvent = policy.portfolioRisk.maxPerEvent;
+      maxPerCategory = policy.portfolioRisk.maxPerCategory;
       notes.push(
-        `Applied trained policy (${before} → ${signals.length} signals). Enabled: ${policy.rules
-          .filter((r) => r.enabled)
-          .map((r) => r.strategyId)
-          .join(", ") || "none"}.`,
+        `Applied trained policy (${before} → ${signals.length} signals). Fee-aware settlement + correlation caps.`,
       );
     } else {
       notes.push(
@@ -114,6 +125,11 @@ export async function runDayBacktest(
     minEdgeScore: fillMinEdge,
     alreadyTraded: new Set(),
     maxFills: 200,
+    sizeMultByStrategy,
+    edgeSized: true,
+    maxPerEvent,
+    maxPerCategory,
+    categoryByTicker,
   });
 
   const trades: BacktestTrade[] = [];
@@ -121,11 +137,11 @@ export async function runDayBacktest(
     const settledMarket = resultByTicker.get(position.ticker);
     if (!settledMarket) continue;
     const result = settledMarket.result;
-    const { hit, payout, pnl } = settleTrade(
-      position.side,
-      result,
+    const hit = position.side === result;
+    const settledPnl = netPnlAfterCosts(
       position.contracts,
       position.entryPrice,
+      hit,
     );
     const signal = signals.find(
       (s) =>
@@ -147,12 +163,12 @@ export async function runDayBacktest(
       side: position.side,
       entryPrice: position.entryPrice,
       contracts: position.contracts,
-      cost: position.contracts * position.entryPrice,
+      cost: settledPnl.cost,
       edgeScore: signal?.edgeScore ?? 0,
       result,
       hit,
-      payout,
-      pnl,
+      payout: settledPnl.payout,
+      pnl: settledPnl.netPnl,
     });
   }
 
@@ -161,11 +177,17 @@ export async function runDayBacktest(
   const totalCost = trades.reduce((s, t) => s + t.cost, 0);
   const totalPayout = trades.reduce((s, t) => s + t.payout, 0);
   const pnl = trades.reduce((s, t) => s + t.pnl, 0);
-  const endingCash = bankroll - totalCost + totalPayout;
+  const endingCash = bankroll + pnl;
 
   const byStrategyMap = new Map<
     string,
-    { strategyId: string; strategyName: string; trades: number; wins: number; pnl: number }
+    {
+      strategyId: string;
+      strategyName: string;
+      trades: number;
+      wins: number;
+      pnl: number;
+    }
   >();
   for (const t of trades) {
     const cur = byStrategyMap.get(t.strategyId) ?? {
@@ -187,7 +209,7 @@ export async function runDayBacktest(
     );
   } else {
     notes.push(
-      `Assumes fills at candle YES/NO ask, held to settlement. Fees ignored. One snapshot per market (last tradeable hour).`,
+      "Assumes fills at candle YES/NO ask, held to settlement. Net P&L subtracts approx taker fee + 50bps slippage. One intraday snapshot per market.",
     );
   }
 

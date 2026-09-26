@@ -120,7 +120,15 @@ export function usePaperPortfolio(markets: MarketQuote[]) {
   const autoTradeSignals = useCallback(
     (
       signals: StrategySignal[],
-      opts: { maxTrade: number; minEdgeScore: number },
+      opts: {
+        maxTrade: number;
+        minEdgeScore: number;
+        sizeMultByStrategy?: Map<StrategyId, number>;
+        edgeSized?: boolean;
+        maxPerEvent?: number;
+        maxPerCategory?: number;
+        categoryByTicker?: Map<string, string>;
+      },
     ): number => {
       let fills = 0;
       setPortfolio((prev) => {
@@ -128,6 +136,11 @@ export function usePaperPortfolio(markets: MarketQuote[]) {
           maxTrade: opts.maxTrade,
           minEdgeScore: opts.minEdgeScore,
           alreadyTraded: autoTradedRef.current,
+          sizeMultByStrategy: opts.sizeMultByStrategy,
+          edgeSized: opts.edgeSized ?? true,
+          maxPerEvent: opts.maxPerEvent,
+          maxPerCategory: opts.maxPerCategory,
+          categoryByTicker: opts.categoryByTicker,
         });
         fills = result.fillCount;
         for (const key of result.tradedKeys) {
@@ -149,6 +162,14 @@ export function usePaperPortfolio(markets: MarketQuote[]) {
                 : "";
             setToast(
               `Nothing filled — max trade $${opts.maxTrade.toFixed(2)} is below contract prices.${need} Raise max trade.`,
+            );
+          }
+        } else if (result.skippedForCorrelation > 0) {
+          const now = Date.now();
+          if (now - lastSizeToastAtRef.current > 12_000) {
+            lastSizeToastAtRef.current = now;
+            setToast(
+              `Skipped ${result.skippedForCorrelation} signal(s) for event/category correlation caps.`,
             );
           }
         }

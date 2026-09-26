@@ -45,6 +45,8 @@ export type MarketQuote = {
   closeTime: string | null;
   mid: number;
   spread: number;
+  /** Normalized category when known (live or historical). */
+  category?: string;
 };
 
 export type MarketsResponse = {

@@ -24,7 +24,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BacktestPanel } from "@/components/backtest-panel";
 import { TrainingPanel } from "@/components/training-panel";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
-import { filterAndRankSignals } from "@/lib/training/policy";
+import type { KalshiCredentialStatus } from "@/lib/kalshi/credentials";
+import { featuresFromQuote } from "@/lib/trading/features";
+import type { DeskAlert } from "@/lib/training/alerts";
+import { filterAndRankSignals, ruleMap } from "@/lib/training/policy";
 import type { TrainedPolicy } from "@/lib/training/types";
 import {
   DEFAULT_DESK_SETTINGS,
@@ -133,6 +136,10 @@ export function EdgebookApp() {
   );
   const [trainedPolicy, setTrainedPolicy] = useState<TrainedPolicy | null>(null);
   const [useTrainedPolicy, setUseTrainedPolicy] = useState(true);
+  const [policyAlerts, setPolicyAlerts] = useState<DeskAlert[]>([]);
+  const [kalshiCreds, setKalshiCreds] = useState<KalshiCredentialStatus | null>(
+    null,
+  );
   const hasLoadedOnce = useRef(false);
   const autoPassRef = useRef(0);
 
@@ -162,17 +169,30 @@ export function EdgebookApp() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/training");
-        if (!res.ok) throw new Error(`Policy API ${res.status}`);
-        const data = (await res.json()) as { policy: TrainedPolicy | null };
+        const [trainRes, kalshiRes] = await Promise.all([
+          fetch("/api/training"),
+          fetch("/api/kalshi/status"),
+        ]);
+        if (!trainRes.ok) throw new Error(`Policy API ${trainRes.status}`);
+        const data = (await trainRes.json()) as {
+          policy: TrainedPolicy | null;
+          alerts?: DeskAlert[];
+        };
         if (cancelled) return;
         setTrainedPolicy(data.policy);
+        setPolicyAlerts(data.alerts ?? []);
         setPolicyLoadError(
           data.policy
             ? null
-            : "No trained-policy.json found — run npm run train.",
+            : "No trained-policy.json found — run Retrain or npm run train.",
         );
         if (data.policy) setUseTrainedPolicy(true);
+        if (kalshiRes.ok) {
+          const k = (await kalshiRes.json()) as {
+            credentials: KalshiCredentialStatus;
+          };
+          if (!cancelled) setKalshiCreds(k.credentials);
+        }
       } catch (e) {
         if (!cancelled) {
           setTrainedPolicy(null);
@@ -257,12 +277,40 @@ export function EdgebookApp() {
     [markets, matchesQuery],
   );
 
+  const featuresByTicker = useMemo(() => {
+    const map = new Map(
+      markets.map((m) => [
+        m.ticker,
+        featuresFromQuote({
+          spread: m.spread,
+          volume: m.volume,
+          mid: m.mid || m.lastPrice,
+          closeTime: m.closeTime,
+          category: m.category,
+        }),
+      ]),
+    );
+    return map;
+  }, [markets]);
+
+  const categoryByTicker = useMemo(
+    () =>
+      new Map(
+        markets.map((m) => [m.ticker, m.category || "unknown"] as const),
+      ),
+    [markets],
+  );
+
   const policySignals = useMemo(() => {
     if (useTrainedPolicy && trainedPolicy) {
-      return filterAndRankSignals(signals, trainedPolicy.rules);
+      return filterAndRankSignals(signals, {
+        rules: trainedPolicy.rules,
+        logistic: trainedPolicy.logistic,
+        featuresByTicker,
+      });
     }
     return signals;
-  }, [signals, useTrainedPolicy, trainedPolicy]);
+  }, [signals, useTrainedPolicy, trainedPolicy, featuresByTicker]);
 
   const filteredSignals = useMemo(
     () => policySignals.filter((signal) => matchesQuery(signal.market)),
@@ -301,6 +349,15 @@ export function EdgebookApp() {
     if (portfolio.cash < 0.01) return;
 
     const pass = ++autoPassRef.current;
+    const sizeMultByStrategy =
+      useTrainedPolicy && trainedPolicy
+        ? new Map(
+            [...ruleMap(trainedPolicy.rules).entries()].map(
+              ([id, r]) => [id, r.sizeMult] as const,
+            ),
+          )
+        : undefined;
+    const risk = trainedPolicy?.portfolioRisk;
     // Defer one tick so mark-to-market effects settle first.
     const t = window.setTimeout(() => {
       if (pass !== autoPassRef.current) return;
@@ -309,6 +366,11 @@ export function EdgebookApp() {
         // Trained rules already enforce per-strategy min edges.
         minEdgeScore:
           useTrainedPolicy && trainedPolicy ? 0 : settings.minEdgeScore,
+        sizeMultByStrategy,
+        edgeSized: true,
+        maxPerEvent: risk?.maxPerEvent ?? 1,
+        maxPerCategory: risk?.maxPerCategory ?? 3,
+        categoryByTicker,
       });
     }, 250);
     return () => window.clearTimeout(t);
@@ -323,6 +385,7 @@ export function EdgebookApp() {
     autoTradeSignals,
     useTrainedPolicy,
     trainedPolicy,
+    categoryByTicker,
   ]);
 
   // Rescan while auto-trade is armed.
@@ -486,6 +549,22 @@ export function EdgebookApp() {
           {error}
         </div>
       ) : null}
+
+      {policyAlerts
+        .filter((a) => a.severity === "critical" || a.severity === "warn")
+        .slice(0, 2)
+        .map((a) => (
+          <div
+            key={a.id}
+            className={`animate-rise-delay-1 rounded-xl border px-4 py-3 text-sm ${
+              a.severity === "critical"
+                ? "border-red-300 bg-red-50 text-red-950"
+                : "border-amber-500/30 bg-amber-50 text-amber-950"
+            }`}
+          >
+            <span className="font-medium">{a.title}.</span> {a.detail}
+          </div>
+        ))}
 
       {toast ? (
         <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-ink px-4 py-3 text-sm text-white shadow-lg">
@@ -837,12 +916,46 @@ export function EdgebookApp() {
 
         <TabsContent value="risk" className="space-y-4">
           <div className="rounded-xl border border-border/80 bg-card/95 p-4 sm:p-5">
+            <h3 className="font-heading text-xl font-semibold">Kalshi key gate</h3>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Live order placement stays locked in this build. Public market
+              scans and paper trading work without credentials.
+            </p>
+            <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+              <div className="rounded-lg bg-secondary/60 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">API key</dt>
+                <dd className="font-mono font-medium">
+                  {kalshiCreds?.apiKeyPresent ? "present" : "missing"}
+                </dd>
+              </div>
+              <div className="rounded-lg bg-secondary/60 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">Private key</dt>
+                <dd className="font-mono font-medium">
+                  {kalshiCreds?.privateKeyPresent ? "present" : "missing"}
+                </dd>
+              </div>
+              <div className="rounded-lg bg-secondary/60 px-3 py-2">
+                <dt className="text-xs text-muted-foreground">Live orders</dt>
+                <dd className="font-mono font-medium text-amber-800">
+                  locked (paper only)
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-xs text-muted-foreground">
+              {kalshiCreds?.message ??
+                "Checking env for KALSHI_API_KEY / KALSHI_PRIVATE_KEY…"}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-card/95 p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
                 <h3 className="font-heading text-xl font-semibold">Risk controls</h3>
                 <p className="max-w-xl text-sm text-muted-foreground">
                   Bankroll sets paper cash on reset. Max trade caps every ticket
                   (manual and auto). Auto-trade paper-buys ranked signals until cash runs out.
+                  Trained mode also applies size multipliers, edge sizing, and
+                  event/category correlation caps.
                 </p>
               </div>
               <div className="flex flex-col gap-2">
@@ -1085,7 +1198,7 @@ export function EdgebookApp() {
                     ? "Trained rules are filtering Signals and auto-trade right now."
                     : "Trained rules are loaded but baseline heuristics are active."
                   : policyLoadError ??
-                    "No trained policy available. Run npm run train, then refresh."}
+                    "No trained policy available. Use Retrain now, then Apply."}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1106,7 +1219,15 @@ export function EdgebookApp() {
               </Button>
             </div>
           </div>
-          <TrainingPanel />
+          <TrainingPanel
+            onPolicyChange={(p) => {
+              setTrainedPolicy(p);
+              if (p) {
+                setUseTrainedPolicy(true);
+                setPolicyLoadError(null);
+              }
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="strategies" className="grid gap-3 md:grid-cols-2">

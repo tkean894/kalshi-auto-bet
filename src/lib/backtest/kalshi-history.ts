@@ -1,9 +1,16 @@
 import { midPrice, parseDollars, spreadWidth } from "@/lib/format";
 import type { KalshiMarket, MarketQuote } from "@/lib/kalshi/types";
+import {
+  defaultFeatures,
+  normalizeCategory,
+  type SignalFeatures,
+} from "@/lib/trading/features";
 
 const BASE =
   process.env.KALSHI_API_BASE ??
   "https://external-api.kalshi.com/trade-api/v2";
+
+export const HISTORY_CACHE_VERSION = 3;
 
 export type SettledMarket = KalshiMarket & {
   result: "yes" | "no";
@@ -75,16 +82,27 @@ export async function fetchSettledMarketsForDay(opts: {
   return out;
 }
 
-async function fetchSeriesTicker(eventTicker: string): Promise<string | null> {
+type EventMeta = {
+  seriesTicker: string | null;
+  category: string;
+};
+
+async function fetchEventMeta(eventTicker: string): Promise<EventMeta> {
   try {
-    const data = await getJson<{ event?: { series_ticker?: string } }>(
-      `${BASE}/events/${encodeURIComponent(eventTicker)}`,
-    );
-    return data.event?.series_ticker ?? null;
+    const data = await getJson<{
+      event?: { series_ticker?: string; category?: string; title?: string };
+    }>(`${BASE}/events/${encodeURIComponent(eventTicker)}`);
+    return {
+      seriesTicker: data.event?.series_ticker ?? eventTicker.split("-")[0] ?? null,
+      category: normalizeCategory(
+        data.event?.category || data.event?.title || "unknown",
+      ),
+    };
   } catch {
-    // Fallback: series is usually the prefix before the first date segment.
-    const parts = eventTicker.split("-");
-    return parts[0] || null;
+    return {
+      seriesTicker: eventTicker.split("-")[0] || null,
+      category: "unknown",
+    };
   }
 }
 
@@ -181,7 +199,6 @@ function quoteFromCandle(
   );
 }
 
-/** Pre-settlement book snapshot when candles are missing. */
 function quoteFromSettledSnapshot(market: SettledMarket): MarketQuote | null {
   const yesAsk = parseDollars(market.previous_yes_ask_dollars);
   const yesBid = parseDollars(market.previous_yes_bid_dollars);
@@ -189,9 +206,82 @@ function quoteFromSettledSnapshot(market: SettledMarket): MarketQuote | null {
   return buildQuote(market, yesBid, yesAsk, last, last);
 }
 
+function candleMid(c: Candle): number {
+  const ask = parseDollars(c.yes_ask?.close_dollars);
+  const bid = parseDollars(c.yes_bid?.close_dollars);
+  const px = parseDollars(c.price?.close_dollars);
+  if (ask > 0 && bid > 0) return midPrice(bid, ask);
+  return px || ask || bid || 0;
+}
+
+/**
+ * Prefer an earlier intraday tradeable candle with volume (≈40–70% through the day)
+ * instead of the last pre-settlement print.
+ */
+function pickEntryCandleIndex(candles: Candle[]): number {
+  const tradeable: number[] = [];
+  for (let i = 0; i < candles.length; i += 1) {
+    const ask = parseDollars(candles[i].yes_ask?.close_dollars);
+    const bid = parseDollars(candles[i].yes_bid?.close_dollars);
+    if (ask > 0.01 && ask < 0.99 && bid > 0) tradeable.push(i);
+  }
+  if (tradeable.length === 0) return -1;
+
+  const withVol = tradeable.filter(
+    (i) => parseDollars(candles[i].volume_fp) > 0,
+  );
+  const pool = withVol.length ? withVol : tradeable;
+  // Target ~55% through the tradeable session
+  const target = pool[Math.floor(pool.length * 0.55)] ?? pool[0];
+  return target;
+}
+
+function buildFeatures(opts: {
+  market: SettledMarket;
+  quote: MarketQuote;
+  candles: Candle[];
+  entryIdx: number;
+  category: string;
+}): SignalFeatures {
+  const vols = opts.candles.map((c) => parseDollars(c.volume_fp));
+  const avgVol =
+    vols.reduce((a, b) => a + b, 0) / Math.max(vols.length, 1) || 1;
+  const entryVol =
+    opts.entryIdx >= 0 ? parseDollars(opts.candles[opts.entryIdx].volume_fp) : 0;
+  const earlyIdx = opts.entryIdx > 2 ? Math.floor(opts.entryIdx * 0.3) : 0;
+  const earlyMid =
+    opts.entryIdx >= 0 ? candleMid(opts.candles[earlyIdx]) : opts.quote.mid;
+  const pathDelta = opts.quote.mid - earlyMid;
+
+  let hoursToClose: number | null = null;
+  if (opts.market.close_time) {
+    const closeMs = Date.parse(opts.market.close_time);
+    const entryTs =
+      opts.entryIdx >= 0
+        ? opts.candles[opts.entryIdx].end_period_ts * 1000
+        : closeMs - 6 * 3600_000;
+    hoursToClose = Math.max(0, (closeMs - entryTs) / 3600_000);
+  }
+
+  return defaultFeatures({
+    category: opts.category,
+    hoursToClose,
+    spread: opts.quote.spread,
+    volume: opts.quote.volume,
+    logVolume: Math.log10(opts.quote.volume + 1),
+    mid: opts.quote.mid,
+    pathDelta,
+    volumeSpike: entryVol / avgVol,
+    bookTightness: Math.max(0, 1 - opts.quote.spread / 0.1),
+  });
+}
+
 export type HistoricalQuote = {
   market: SettledMarket;
   quote: MarketQuote;
+  category: string;
+  features: SignalFeatures;
+  seriesTicker: string | null;
 };
 
 async function mapPool<T, R>(
@@ -214,9 +304,6 @@ async function mapPool<T, R>(
   return results;
 }
 
-/**
- * Build as-of quotes for top settled markets using hourly candles from that day.
- */
 export async function buildHistoricalQuotes(opts: {
   markets: SettledMarket[];
   startTs: number;
@@ -229,30 +316,66 @@ export async function buildHistoricalQuotes(opts: {
     .sort((a, b) => parseDollars(b.volume_fp) - parseDollars(a.volume_fp))
     .slice(0, limit);
 
-  const seriesCache = new Map<string, string | null>();
+  const eventCache = new Map<string, EventMeta>();
 
   const quotes = await mapPool(ranked, 3, async (market) => {
-    let series = seriesCache.get(market.event_ticker);
-    if (series === undefined) {
-      series = await fetchSeriesTicker(market.event_ticker);
-      seriesCache.set(market.event_ticker, series);
+    let meta = eventCache.get(market.event_ticker);
+    if (!meta) {
+      meta = await fetchEventMeta(market.event_ticker);
+      eventCache.set(market.event_ticker, meta);
     }
 
-    if (series) {
+    const category = normalizeCategory(
+      market.category || meta.category || "unknown",
+    );
+
+    if (meta.seriesTicker) {
       const candles = await fetchCandles(
-        series,
+        meta.seriesTicker,
         market.ticker,
         opts.startTs,
         opts.endTs,
       );
-      for (let i = candles.length - 1; i >= 0; i -= 1) {
-        const quote = quoteFromCandle(market, candles[i], candles[i - 1]);
-        if (quote) return { market, quote };
+      const entryIdx = pickEntryCandleIndex(candles);
+      if (entryIdx >= 0) {
+        const quote = quoteFromCandle(
+          market,
+          candles[entryIdx],
+          candles[entryIdx - 1],
+        );
+        if (quote) {
+          return {
+            market,
+            quote,
+            category,
+            seriesTicker: meta.seriesTicker,
+            features: buildFeatures({
+              market,
+              quote,
+              candles,
+              entryIdx,
+              category,
+            }),
+          };
+        }
       }
     }
 
     const fallback = quoteFromSettledSnapshot(market);
-    return fallback ? { market, quote: fallback } : null;
+    if (!fallback) return null;
+    return {
+      market,
+      quote: fallback,
+      category,
+      seriesTicker: meta.seriesTicker,
+      features: buildFeatures({
+        market,
+        quote: fallback,
+        candles: [],
+        entryIdx: -1,
+        category,
+      }),
+    };
   });
 
   return quotes.filter((q): q is HistoricalQuote => q != null);
