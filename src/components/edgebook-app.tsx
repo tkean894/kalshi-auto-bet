@@ -128,7 +128,11 @@ export function EdgebookApp() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
-  const [activeTab, setActiveTab] = useState("signals");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "signals";
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab && tab.length > 0 ? tab : "signals";
+  });
   const [settings, setSettings] = useState<DeskSettings>(DEFAULT_DESK_SETTINGS);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [maxTradeDraft, setMaxTradeDraft] = useState(
@@ -211,6 +215,14 @@ export function EdgebookApp() {
     if (!settingsHydrated) return;
     saveDeskSettings(settings);
   }, [settings, settingsHydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === activeTab) return;
+    url.searchParams.set("tab", activeTab);
+    window.history.replaceState({}, "", url.toString());
+  }, [activeTab]);
 
   const updateSettings = useCallback((patch: Partial<DeskSettings>) => {
     setSettings((prev) => normalizeDeskSettings({ ...prev, ...patch }));
@@ -608,33 +620,69 @@ export function EdgebookApp() {
         </div>
       </section>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="animate-rise-delay-2 gap-4">
-        <TabsList className="h-auto w-full flex-wrap justify-start bg-card/80 p-1">
-          <TabsTrigger value="signals" className="gap-1.5">
+      <Tabs
+        value={activeTab}
+        onValueChange={(next) => {
+          if (typeof next === "string" && next.length > 0) {
+            setActiveTab(next);
+          }
+        }}
+        className="animate-rise-delay-2 gap-4"
+      >
+        <TabsList className="relative z-10 h-auto w-full flex-wrap justify-start bg-card/80 p-1">
+          <TabsTrigger
+            value="signals"
+            className="pointer-events-auto gap-1.5"
+            data-tab="signals"
+          >
             <Target className="size-3.5" />
             Signals
           </TabsTrigger>
-          <TabsTrigger value="markets" className="gap-1.5">
+          <TabsTrigger
+            value="markets"
+            className="pointer-events-auto gap-1.5"
+            data-tab="markets"
+          >
             <LineChart className="size-3.5" />
             Markets
           </TabsTrigger>
-          <TabsTrigger value="paper" className="gap-1.5">
+          <TabsTrigger
+            value="paper"
+            className="pointer-events-auto gap-1.5"
+            data-tab="paper"
+          >
             <Wallet className="size-3.5" />
             Paper desk
           </TabsTrigger>
-          <TabsTrigger value="risk" className="gap-1.5">
+          <TabsTrigger
+            value="risk"
+            className="pointer-events-auto gap-1.5"
+            data-tab="risk"
+          >
             <Bot className="size-3.5" />
             Risk & auto
           </TabsTrigger>
-          <TabsTrigger value="backtest" className="gap-1.5">
+          <TabsTrigger
+            value="backtest"
+            className="pointer-events-auto gap-1.5"
+            data-tab="backtest"
+          >
             <FlaskConical className="size-3.5" />
             Backtest
           </TabsTrigger>
-          <TabsTrigger value="training" className="gap-1.5">
+          <TabsTrigger
+            value="training"
+            className="pointer-events-auto gap-1.5"
+            data-tab="training"
+          >
             <BrainCircuit className="size-3.5" />
             Training
           </TabsTrigger>
-          <TabsTrigger value="strategies" className="gap-1.5">
+          <TabsTrigger
+            value="strategies"
+            className="pointer-events-auto gap-1.5"
+            data-tab="strategies"
+          >
             <Activity className="size-3.5" />
             Strategies
           </TabsTrigger>
