@@ -22,6 +22,9 @@ export type KalshiMarket = {
   close_time?: string;
   open_time?: string;
   category?: string;
+  result?: string;
+  settlement_ts?: string;
+  settlement_value_dollars?: string;
 };
 
 export type MarketQuote = {

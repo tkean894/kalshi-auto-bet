@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BacktestPanel } from "@/components/backtest-panel";
 import { usePaperPortfolio } from "@/hooks/use-paper-portfolio";
 import {
   DEFAULT_DESK_SETTINGS,
@@ -49,6 +50,7 @@ import {
   Activity,
   ArrowUpRight,
   Bot,
+  FlaskConical,
   LineChart,
   LoaderCircle,
   RefreshCw,
@@ -490,6 +492,10 @@ export function EdgebookApp() {
           <TabsTrigger value="risk" className="gap-1.5">
             <Bot className="size-3.5" />
             Risk & auto
+          </TabsTrigger>
+          <TabsTrigger value="backtest" className="gap-1.5">
+            <FlaskConical className="size-3.5" />
+            Backtest
           </TabsTrigger>
           <TabsTrigger value="strategies" className="gap-1.5">
             <Activity className="size-3.5" />
@@ -962,6 +968,15 @@ export function EdgebookApp() {
               </p>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="backtest">
+          <BacktestPanel
+            bankroll={settings.bankroll}
+            maxTrade={settings.maxTrade}
+            minEdgeScore={settings.minEdgeScore}
+            strategyId={strategyId}
+          />
         </TabsContent>
 
         <TabsContent value="strategies" className="grid gap-3 md:grid-cols-2">
