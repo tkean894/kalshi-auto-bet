@@ -7,7 +7,7 @@ import type { DeskAlert } from "@/lib/training/alerts";
 import type { PeriodMetrics, TrainedPolicy } from "@/lib/training/types";
 import type { TrainStatus } from "@/lib/training/train-status";
 import { LoaderCircle, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Payload = {
   policy: TrainedPolicy | null;
@@ -94,50 +94,97 @@ function MetricsCard({
 }
 
 export function TrainingPanel({
+  initialPolicy = null,
+  initialAlerts = [],
+  initialTrainStatus = null,
   onPolicyChange,
 }: {
+  initialPolicy?: TrainedPolicy | null;
+  initialAlerts?: DeskAlert[];
+  initialTrainStatus?: TrainStatus | null;
   onPolicyChange?: (policy: TrainedPolicy | null) => void;
 }) {
-  const [policy, setPolicy] = useState<TrainedPolicy | null>(null);
-  const [alerts, setAlerts] = useState<DeskAlert[]>([]);
-  const [trainStatus, setTrainStatus] = useState<TrainStatus | null>(null);
+  const [policy, setPolicy] = useState<TrainedPolicy | null>(initialPolicy);
+  const [alerts, setAlerts] = useState<DeskAlert[]>(initialAlerts);
+  const [trainStatus, setTrainStatus] = useState<TrainStatus | null>(
+    initialTrainStatus,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Only block UI if parent has not already loaded a policy.
+  const [loading, setLoading] = useState(initialPolicy == null);
+  const [refreshing, setRefreshing] = useState(false);
   const [retraining, setRetraining] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/training");
-    const data = (await res.json()) as Payload;
-    setPolicy(data.policy);
-    setAlerts(data.alerts ?? []);
-    setTrainStatus(data.trainStatus ?? null);
-    onPolicyChange?.(data.policy);
-    return data;
+  const onPolicyChangeRef = useRef(onPolicyChange);
+  useEffect(() => {
+    onPolicyChangeRef.current = onPolicyChange;
   }, [onPolicyChange]);
 
+  // Keep in sync when parent finishes its own /api/training load.
   useEffect(() => {
+    if (initialPolicy) {
+      setPolicy(initialPolicy);
+      setLoading(false);
+    }
+  }, [initialPolicy]);
+
+  useEffect(() => {
+    setAlerts(initialAlerts);
+  }, [initialAlerts]);
+
+  useEffect(() => {
+    if (initialTrainStatus) setTrainStatus(initialTrainStatus);
+  }, [initialTrainStatus]);
+
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setRefreshing(true);
+    try {
+      const res = await fetch("/api/training", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Training API ${res.status}`);
+      const data = (await res.json()) as Payload;
+      setPolicy(data.policy);
+      setAlerts(data.alerts ?? []);
+      setTrainStatus(data.trainStatus ?? null);
+      setError(null);
+      onPolicyChangeRef.current?.(data.policy);
+      return data;
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // One-shot fetch only when parent did not already supply a policy.
+  useEffect(() => {
+    if (initialPolicy != null) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        await refresh();
+        await refresh({ silent: true });
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load training report");
+          setError(
+            e instanceof Error ? e.message : "Failed to load training report",
+          );
+          setLoading(false);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
+    // Intentionally once on mount — parent props update via the sync effects above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Poll while retrain is running.
   useEffect(() => {
     if (trainStatus?.status !== "running") return;
     const id = window.setInterval(() => {
-      void refresh().catch(() => undefined);
+      void refresh({ silent: true }).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(id);
   }, [trainStatus?.status, refresh]);
@@ -156,7 +203,7 @@ export function TrainingPanel({
         setError(data.error ?? `Retrain failed (${res.status})`);
       }
       if (data.trainStatus) setTrainStatus(data.trainStatus);
-      await refresh();
+      await refresh({ silent: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start retrain");
     } finally {
@@ -164,7 +211,7 @@ export function TrainingPanel({
     }
   };
 
-  if (loading) {
+  if (loading && !policy) {
     return (
       <p className="text-sm text-muted-foreground">Loading training report…</p>
     );
@@ -205,9 +252,13 @@ export function TrainingPanel({
               variant="outline"
               size="sm"
               onClick={() => void refresh()}
-              disabled={running}
+              disabled={running || refreshing}
             >
-              <RefreshCw data-icon="inline-start" />
+              {refreshing ? (
+                <LoaderCircle className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <RefreshCw data-icon="inline-start" />
+              )}
               Refresh
             </Button>
             <Button size="sm" onClick={() => void startRetrain()} disabled={running}>

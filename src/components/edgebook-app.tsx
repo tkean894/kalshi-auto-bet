@@ -28,6 +28,7 @@ import type { KalshiCredentialStatus } from "@/lib/kalshi/credentials";
 import { featuresFromQuote } from "@/lib/trading/features";
 import type { DeskAlert } from "@/lib/training/alerts";
 import { filterAndRankSignals, ruleMap } from "@/lib/training/policy";
+import type { TrainStatus } from "@/lib/training/train-status";
 import type { TrainedPolicy } from "@/lib/training/types";
 import {
   DEFAULT_DESK_SETTINGS,
@@ -154,6 +155,7 @@ export function EdgebookApp() {
   const [trainedPolicy, setTrainedPolicy] = useState<TrainedPolicy | null>(null);
   const [useTrainedPolicy, setUseTrainedPolicy] = useState(true);
   const [policyAlerts, setPolicyAlerts] = useState<DeskAlert[]>([]);
+  const [trainStatus, setTrainStatus] = useState<TrainStatus | null>(null);
   const [kalshiCreds, setKalshiCreds] = useState<KalshiCredentialStatus | null>(
     null,
   );
@@ -194,10 +196,12 @@ export function EdgebookApp() {
         const data = (await trainRes.json()) as {
           policy: TrainedPolicy | null;
           alerts?: DeskAlert[];
+          trainStatus?: TrainStatus;
         };
         if (cancelled) return;
         setTrainedPolicy(data.policy);
         setPolicyAlerts(data.alerts ?? []);
+        setTrainStatus(data.trainStatus ?? null);
         setPolicyLoadError(
           data.policy
             ? null
@@ -260,6 +264,14 @@ export function EdgebookApp() {
 
   const updateSettings = useCallback((patch: Partial<DeskSettings>) => {
     setSettings((prev) => normalizeDeskSettings({ ...prev, ...patch }));
+  }, []);
+
+  const handlePolicyChange = useCallback((p: TrainedPolicy | null) => {
+    setTrainedPolicy(p);
+    if (p) {
+      setUseTrainedPolicy(true);
+      setPolicyLoadError(null);
+    }
   }, []);
 
   const contractsFor = useCallback(
@@ -1289,13 +1301,10 @@ export function EdgebookApp() {
             </div>
           </div>
           <TrainingPanel
-            onPolicyChange={(p) => {
-              setTrainedPolicy(p);
-              if (p) {
-                setUseTrainedPolicy(true);
-                setPolicyLoadError(null);
-              }
-            }}
+            initialPolicy={trainedPolicy}
+            initialAlerts={policyAlerts}
+            initialTrainStatus={trainStatus}
+            onPolicyChange={handlePolicyChange}
           />
         </div>
         ) : null}
