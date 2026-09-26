@@ -40,9 +40,18 @@ export async function loadDayCache(date: string): Promise<DayCache | null> {
 export async function buildOrLoadDayCache(
   date: string,
   marketLimit = 160,
+  opts?: { force?: boolean },
 ): Promise<DayCache> {
   const existing = await loadDayCache(date);
-  if (existing && existing.quotes.length > 0) return existing;
+  const existingLimit = existing?.marketLimit ?? existing?.quotes.length ?? 0;
+  if (
+    !opts?.force &&
+    existing &&
+    existing.quotes.length > 0 &&
+    existingLimit >= marketLimit
+  ) {
+    return existing;
+  }
 
   const window = dayWindowEt(date);
   const settled = await fetchSettledMarketsForDay({
@@ -61,6 +70,7 @@ export async function buildOrLoadDayCache(
     timezone: window.timezone,
     builtAt: new Date().toISOString(),
     marketsScanned: settled.length,
+    marketLimit,
     quotes: historical.map((h) => ({
       ticker: h.market.ticker,
       title: h.market.title || h.quote.title,

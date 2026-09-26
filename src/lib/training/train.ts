@@ -21,8 +21,8 @@ const ALL_STRATEGIES: StrategyId[] = [
   "liquidity",
 ];
 
-const EDGE_GRID = [50, 55, 60, 65, 70, 75, 80, 85];
-const ENTRY_CAPS: Array<number | null> = [null, 0.35, 0.55, 0.75];
+const EDGE_GRID = [45, 50, 55, 60, 65, 70, 75, 80, 85, 90];
+const ENTRY_CAPS: Array<number | null> = [null, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85];
 
 function cloneRules(rules: TrainedStrategyRule[]): TrainedStrategyRule[] {
   return rules.map((r) => ({ ...r }));
@@ -45,11 +45,11 @@ export async function trainPolicy(opts?: {
   maxTrade?: number;
   marketLimit?: number;
 }): Promise<TrainedPolicy> {
-  const days = opts?.days ?? 10;
-  const holdoutDays = opts?.holdoutDays ?? 3;
+  const days = opts?.days ?? 14;
+  const holdoutDays = opts?.holdoutDays ?? 4;
   const bankroll = opts?.bankroll ?? 1000;
   const maxTrade = opts?.maxTrade ?? 25;
-  const marketLimit = opts?.marketLimit ?? 160;
+  const marketLimit = opts?.marketLimit ?? 200;
 
   const allDates = listRecentEtDates(days);
   if (allDates.length < holdoutDays + 2) {
@@ -191,11 +191,11 @@ export async function trainPolicy(opts?: {
     bestJointScore = localScore;
   }
 
-  // Stage 3: rank boosts for enabled strategies (0 / +5 / +10).
+  // Stage 3: rank boosts for enabled strategies.
   let bestBoosted = cloneRules(bestJoint);
   let bestBoostScore = bestJointScore;
   for (const strategyId of enabledIds) {
-    for (const boost of [0, 5, 10]) {
+    for (const boost of [0, 5, 10, 15]) {
       const trial = cloneRules(bestBoosted).map((r) =>
         r.strategyId === strategyId ? { ...r, rankBoost: boost } : r,
       );
@@ -212,6 +212,44 @@ export async function trainPolicy(opts?: {
         bestBoosted = trial;
       }
     }
+  }
+
+  // Stage 4: leave-one-strategy-out — drop any enabled strategy that hurts train PnL.
+  {
+    let current = cloneRules(bestBoosted);
+    let { metrics: curMetrics } = await evaluatePolicyOnDates({
+      dates: trainDates,
+      rules: current,
+      bankroll,
+      maxTrade,
+      caches,
+    });
+    let improved = true;
+    while (improved) {
+      improved = false;
+      const enabled = current.filter((r) => r.enabled);
+      if (enabled.length <= 1) break;
+      for (const rule of enabled) {
+        const trial = cloneRules(current).map((r) =>
+          r.strategyId === rule.strategyId ? { ...r, enabled: false } : r,
+        );
+        const { metrics } = await evaluatePolicyOnDates({
+          dates: trainDates,
+          rules: trial,
+          bankroll,
+          maxTrade,
+          caches,
+        });
+        if (scoreMetrics(metrics) > scoreMetrics(curMetrics)) {
+          current = trial;
+          curMetrics = metrics;
+          improved = true;
+          break;
+        }
+      }
+    }
+    bestBoosted = current;
+    bestBoostScore = scoreMetrics(curMetrics);
   }
 
   const trainedRules = bestBoosted;

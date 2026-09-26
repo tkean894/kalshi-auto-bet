@@ -70,6 +70,8 @@ export type DayCache = {
   timezone: string;
   builtAt: string;
   marketsScanned: number;
+  /** How many top-volume markets we attempted when building quotes. */
+  marketLimit?: number;
   quotes: {
     ticker: string;
     title: string;
