@@ -20,7 +20,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BacktestPanel } from "@/components/backtest-panel";
 import { MaxTradeSuggestion } from "@/components/max-trade-suggestion";
 import { TrainingPanel } from "@/components/training-panel";
@@ -115,6 +114,23 @@ type TradeDraft = {
 
 const STRATEGY_ALL = "all";
 
+const DESK_TABS = [
+  { id: "signals", label: "Signals", Icon: Target },
+  { id: "markets", label: "Markets", Icon: LineChart },
+  { id: "paper", label: "Paper desk", Icon: Wallet },
+  { id: "risk", label: "Risk & auto", Icon: Bot },
+  { id: "backtest", label: "Backtest", Icon: FlaskConical },
+  { id: "training", label: "Training", Icon: BrainCircuit },
+  { id: "strategies", label: "Strategies", Icon: Activity },
+] as const;
+
+type DeskTabId = (typeof DESK_TABS)[number]["id"];
+
+function isDeskTab(value: string | null | undefined): value is DeskTabId {
+  return !!value && DESK_TABS.some((t) => t.id === value);
+}
+
+
 export function EdgebookApp() {
   const [markets, setMarkets] = useState<MarketQuote[]>([]);
   const [signals, setSignals] = useState<StrategySignal[]>([]);
@@ -129,11 +145,7 @@ export function EdgebookApp() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState<TradeDraft | null>(null);
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === "undefined") return "signals";
-    const tab = new URLSearchParams(window.location.search).get("tab");
-    return tab && tab.length > 0 ? tab : "signals";
-  });
+  const [activeTab, setActiveTab] = useState<DeskTabId>("signals");
   const [settings, setSettings] = useState<DeskSettings>(DEFAULT_DESK_SETTINGS);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [maxTradeDraft, setMaxTradeDraft] = useState(
@@ -217,13 +229,34 @@ export function EdgebookApp() {
     saveDeskSettings(settings);
   }, [settings, settingsHydrated]);
 
+  // Hydrate from ?tab= after mount (avoids SSR mismatch), then sync the query.
+  const [tabReady, setTabReady] = useState(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    if (isDeskTab(fromUrl)) setActiveTab(fromUrl);
+    setTabReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tabReady) return;
     const url = new URL(window.location.href);
     if (url.searchParams.get("tab") === activeTab) return;
     url.searchParams.set("tab", activeTab);
-    window.history.replaceState({}, "", url.toString());
-  }, [activeTab]);
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [activeTab, tabReady]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const fromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (isDeskTab(fromUrl)) setActiveTab(fromUrl);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const updateSettings = useCallback((patch: Partial<DeskSettings>) => {
     setSettings((prev) => normalizeDeskSettings({ ...prev, ...patch }));
@@ -621,75 +654,37 @@ export function EdgebookApp() {
         </div>
       </section>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(next) => {
-          if (typeof next === "string" && next.length > 0) {
-            setActiveTab(next);
-          }
-        }}
-        className="animate-rise-delay-2 gap-4"
-      >
-        <TabsList className="relative z-10 h-auto w-full flex-wrap justify-start bg-card/80 p-1">
-          <TabsTrigger
-            value="signals"
-            className="pointer-events-auto gap-1.5"
-            data-tab="signals"
-          >
-            <Target className="size-3.5" />
-            Signals
-          </TabsTrigger>
-          <TabsTrigger
-            value="markets"
-            className="pointer-events-auto gap-1.5"
-            data-tab="markets"
-          >
-            <LineChart className="size-3.5" />
-            Markets
-          </TabsTrigger>
-          <TabsTrigger
-            value="paper"
-            className="pointer-events-auto gap-1.5"
-            data-tab="paper"
-          >
-            <Wallet className="size-3.5" />
-            Paper desk
-          </TabsTrigger>
-          <TabsTrigger
-            value="risk"
-            className="pointer-events-auto gap-1.5"
-            data-tab="risk"
-          >
-            <Bot className="size-3.5" />
-            Risk & auto
-          </TabsTrigger>
-          <TabsTrigger
-            value="backtest"
-            className="pointer-events-auto gap-1.5"
-            data-tab="backtest"
-          >
-            <FlaskConical className="size-3.5" />
-            Backtest
-          </TabsTrigger>
-          <TabsTrigger
-            value="training"
-            className="pointer-events-auto gap-1.5"
-            data-tab="training"
-          >
-            <BrainCircuit className="size-3.5" />
-            Training
-          </TabsTrigger>
-          <TabsTrigger
-            value="strategies"
-            className="pointer-events-auto gap-1.5"
-            data-tab="strategies"
-          >
-            <Activity className="size-3.5" />
-            Strategies
-          </TabsTrigger>
-        </TabsList>
+      <div className="animate-rise-delay-2 flex flex-col gap-4">
+        <div
+          role="tablist"
+          aria-label="Desk sections"
+          className="relative z-10 flex h-auto w-full flex-wrap justify-start gap-1 rounded-lg bg-card/80 p-1"
+        >
+          {DESK_TABS.map(({ id, label, Icon }) => {
+            const selected = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                data-tab={id}
+                aria-selected={selected}
+                onClick={() => setActiveTab(id)}
+                className={
+                  selected
+                    ? "inline-flex items-center gap-1.5 rounded-md bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow-sm"
+                    : "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-foreground/60 hover:text-foreground"
+                }
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-        <TabsContent value="signals" className="space-y-3">
+        {activeTab === "signals" ? (
+        <div role="tabpanel" data-tab-panel="signals" className="space-y-3">
           {strategyMeta ? (
             <div className="rounded-xl border border-border/80 bg-card/90 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -798,9 +793,11 @@ export function EdgebookApp() {
               ))}
             </div>
           )}
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="markets" className="space-y-3">
+        {activeTab === "markets" ? (
+        <div role="tabpanel" data-tab-panel="markets" className="space-y-3">
           {loading ? (
             <EmptyState icon={<LoaderCircle className="animate-spin" />} title="Loading markets…" />
           ) : filteredMarkets.length === 0 ? (
@@ -860,9 +857,11 @@ export function EdgebookApp() {
               </ul>
             </div>
           )}
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="paper" className="space-y-4">
+        {activeTab === "paper" ? (
+        <div role="tabpanel" data-tab-panel="paper" className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <StatTile label="Equity" value={formatUsd(equity)} hint="Cash + marks" />
             <StatTile
@@ -961,9 +960,11 @@ export function EdgebookApp() {
               </ul>
             )}
           </div>
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="risk" className="space-y-4">
+        {activeTab === "risk" ? (
+        <div role="tabpanel" data-tab-panel="risk" className="space-y-4">
           <div className="rounded-xl border border-border/80 bg-card/95 p-4 sm:p-5">
             <h3 className="font-heading text-xl font-semibold">Kalshi key gate</h3>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
@@ -1239,9 +1240,11 @@ export function EdgebookApp() {
               </p>
             </div>
           </div>
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="backtest">
+        {activeTab === "backtest" ? (
+        <div role="tabpanel" data-tab-panel="backtest">
           <BacktestPanel
             bankroll={settings.bankroll}
             maxTrade={settings.maxTrade}
@@ -1250,9 +1253,11 @@ export function EdgebookApp() {
             useTrainedPolicy={useTrainedPolicy}
             trainedPolicyAvailable={!!trainedPolicy}
           />
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="training">
+        {activeTab === "training" ? (
+        <div role="tabpanel" data-tab-panel="training">
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border/80 bg-card/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">Live policy</p>
@@ -1292,9 +1297,11 @@ export function EdgebookApp() {
               }
             }}
           />
-        </TabsContent>
+        </div>
+        ) : null}
 
-        <TabsContent value="strategies" className="grid gap-3 md:grid-cols-2">
+        {activeTab === "strategies" ? (
+        <div role="tabpanel" data-tab-panel="strategies" className="grid gap-3 md:grid-cols-2">
           {strategies.map((strategy) => (
             <button
               key={strategy.id}
@@ -1315,8 +1322,9 @@ export function EdgebookApp() {
               </p>
             </button>
           ))}
-        </TabsContent>
-      </Tabs>
+        </div>
+        ) : null}
+      </div>
 
       <footer className="border-t border-border/70 pt-4 pb-8 text-xs leading-relaxed text-muted-foreground">
         Edgebook ranks heuristic signals for research and paper trading. Auto-trade
