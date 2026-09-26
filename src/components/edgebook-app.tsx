@@ -156,15 +156,30 @@ export function EdgebookApp() {
     setSettingsHydrated(true);
   }, []);
 
+  const [policyLoadError, setPolicyLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch("/api/training");
+        if (!res.ok) throw new Error(`Policy API ${res.status}`);
         const data = (await res.json()) as { policy: TrainedPolicy | null };
-        if (!cancelled) setTrainedPolicy(data.policy);
-      } catch {
-        // optional
+        if (cancelled) return;
+        setTrainedPolicy(data.policy);
+        setPolicyLoadError(
+          data.policy
+            ? null
+            : "No trained-policy.json found — run npm run train.",
+        );
+        if (data.policy) setUseTrainedPolicy(true);
+      } catch (e) {
+        if (!cancelled) {
+          setTrainedPolicy(null);
+          setPolicyLoadError(
+            e instanceof Error ? e.message : "Failed to load trained policy",
+          );
+        }
       }
     })();
     return () => {
@@ -424,14 +439,20 @@ export function EdgebookApp() {
               hint={strategyMeta?.name ?? "All strategies"}
             />
             <StatTile
-              label="Auto-trade"
-              value={settings.autoTrade ? "Armed" : "Off"}
+              label="Policy"
+              value={
+                useTrainedPolicy && trainedPolicy
+                  ? "Trained"
+                  : trainedPolicy
+                    ? "Baseline"
+                    : "Baseline"
+              }
               hint={
-                settings.autoTrade
-                  ? `Edge ≥ ${settings.minEdgeScore} · every ${settings.refreshSeconds}s`
-                  : source === "live"
-                    ? "Kalshi public API"
-                    : "Demo markets"
+                trainedPolicy
+                  ? useTrainedPolicy
+                    ? "Live filters from holdout-trained rules"
+                    : "Trained rules loaded — not applied"
+                  : policyLoadError ?? "No trained policy loaded"
               }
             />
           </div>
@@ -546,6 +567,13 @@ export function EdgebookApp() {
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-heading text-lg font-semibold">{strategyMeta.name}</h3>
                 <Badge variant="secondary">{filteredSignals.length} signals</Badge>
+                {useTrainedPolicy && trainedPolicy ? (
+                  <Badge className="bg-edge text-edge-foreground hover:bg-edge">
+                    Trained policy on
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">Baseline scoring</Badge>
+                )}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {strategyMeta.description}
@@ -817,24 +845,53 @@ export function EdgebookApp() {
                   (manual and auto). Auto-trade paper-buys ranked signals until cash runs out.
                 </p>
               </div>
-              <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-secondary/50 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">Auto-trade</p>
-                  <p className="text-xs text-muted-foreground">
-                    {settings.autoTrade ? "Armed — paper fills only" : "Off"}
-                  </p>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-secondary/50 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">Auto-trade</p>
+                    <p className="text-xs text-muted-foreground">
+                      {settings.autoTrade ? "Armed — paper fills only" : "Off"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.autoTrade}
+                    onCheckedChange={(checked) => {
+                      if (checked) clearAutoTradeMemory();
+                      updateSettings({ autoTrade: checked });
+                      if (checked) {
+                        setActiveTab("paper");
+                        void load({ silent: true });
+                      }
+                    }}
+                  />
                 </div>
-                <Switch
-                  checked={settings.autoTrade}
-                  onCheckedChange={(checked) => {
-                    if (checked) clearAutoTradeMemory();
-                    updateSettings({ autoTrade: checked });
-                    if (checked) {
-                      setActiveTab("paper");
-                      void load({ silent: true });
-                    }
-                  }}
-                />
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-secondary/50 px-3 py-2">
+                  <div className="mr-auto">
+                    <p className="text-sm font-medium">Trained policy</p>
+                    <p className="text-xs text-muted-foreground">
+                      {trainedPolicy
+                        ? useTrainedPolicy
+                          ? "Applied to signals + auto-trade"
+                          : "Loaded — click Apply"
+                        : "Not loaded"}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={!trainedPolicy}
+                    variant={useTrainedPolicy && trainedPolicy ? "default" : "outline"}
+                    onClick={() => setUseTrainedPolicy(true)}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setUseTrainedPolicy(false)}
+                  >
+                    Baseline
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -1017,19 +1074,35 @@ export function EdgebookApp() {
         </TabsContent>
 
         <TabsContent value="training">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card/95 px-4 py-3">
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border/80 bg-card/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium">Apply trained policy live</p>
+              <p className="text-sm font-medium">Live policy</p>
               <p className="text-xs text-muted-foreground">
-                Filters Signals + auto-trade using learned enable / min-edge / entry
-                caps{trainedPolicy ? "" : " (train first — no policy loaded yet)"}.
+                {trainedPolicy
+                  ? useTrainedPolicy
+                    ? "Trained rules are filtering Signals and auto-trade right now."
+                    : "Trained rules are loaded but baseline heuristics are active."
+                  : policyLoadError ??
+                    "No trained policy available. Run npm run train, then refresh."}
               </p>
             </div>
-            <Switch
-              checked={useTrainedPolicy && !!trainedPolicy}
-              disabled={!trainedPolicy}
-              onCheckedChange={(checked) => setUseTrainedPolicy(checked)}
-            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={useTrainedPolicy && trainedPolicy ? "default" : "outline"}
+                disabled={!trainedPolicy}
+                onClick={() => setUseTrainedPolicy(true)}
+              >
+                Apply trained
+              </Button>
+              <Button
+                size="sm"
+                variant={!useTrainedPolicy || !trainedPolicy ? "default" : "outline"}
+                onClick={() => setUseTrainedPolicy(false)}
+              >
+                Use baseline
+              </Button>
+            </div>
           </div>
           <TrainingPanel />
         </TabsContent>
