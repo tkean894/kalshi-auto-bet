@@ -930,10 +930,10 @@ export function EdgebookApp() {
       </Tabs>
 
       <footer className="border-t border-border/70 pt-4 pb-8 text-xs leading-relaxed text-muted-foreground">
-        Edgebook ranks heuristic signals for research and paper trading. Prediction
-        markets involve risk of loss. Past scanner scores are not guarantees. Live
-        order placement requires your own Kalshi API credentials and is not enabled
-        in this first slice.
+        Edgebook ranks heuristic signals for research and paper trading. Auto-trade
+        only simulates fills in your browser within your bankroll and max ticket.
+        Prediction markets involve risk of loss. Live Kalshi order placement is not
+        enabled in this slice.
       </footer>
 
       <Sheet open={!!draft} onOpenChange={(open) => !open && setDraft(null)}>
